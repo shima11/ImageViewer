@@ -311,3 +311,47 @@ struct FullScreenImageViewer: View {
     lastOffset = offset
   }
 }
+
+// MARK: - Preview
+
+#Preview {
+  FullScreenImageViewerPreview()
+}
+
+private struct FullScreenImageViewerPreview: View {
+  @State private var isPresented = true
+
+  var body: some View {
+    FullScreenImageViewer(
+      image: Self.sampleImage,
+      sourceFrame: CGRect(x: 100, y: 300, width: 200, height: 200),
+      isPresented: $isPresented,
+      configuration: .default
+    )
+  }
+
+  private static var sampleImage: UIImage {
+    let size = CGSize(width: 800, height: 600)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { context in
+      // Background gradient
+      let colors = [UIColor.systemBlue.cgColor, UIColor.systemPurple.cgColor]
+      let gradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: colors as CFArray,
+        locations: [0, 1]
+      )!
+      context.cgContext.drawLinearGradient(
+        gradient,
+        start: .zero,
+        end: CGPoint(x: size.width, y: size.height),
+        options: []
+      )
+
+      // Draw some shapes
+      UIColor.white.withAlphaComponent(0.3).setFill()
+      context.cgContext.fillEllipse(in: CGRect(x: 100, y: 100, width: 200, height: 200))
+      context.cgContext.fillEllipse(in: CGRect(x: 500, y: 300, width: 150, height: 150))
+    }
+  }
+}
