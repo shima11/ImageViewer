@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 // MARK: - Full Screen Image Viewer
 
