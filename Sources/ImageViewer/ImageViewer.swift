@@ -51,6 +51,65 @@ extension View {
       )
     )
   }
+
+  /// Presents a full-screen image gallery viewer with swipe navigation.
+  ///
+  /// The viewer is displayed in a separate UIWindow, ensuring it appears above
+  /// all other content including sheets and modals. Users can swipe horizontally
+  /// to navigate between images.
+  ///
+  /// - Parameters:
+  ///   - isPresented: A binding to whether the gallery viewer is presented.
+  ///   - images: The array of images to display.
+  ///   - initialIndex: The index of the image to display initially. Defaults to 0.
+  ///   - sourceFrames: Optional array of source frames for zoom transitions.
+  ///                   Each frame corresponds to the image at the same index.
+  ///   - configuration: Optional configuration for customizing the viewer behavior.
+  ///
+  /// - Returns: A view that presents the image gallery when `isPresented` is true.
+  ///
+  /// Example:
+  /// ```swift
+  /// @State private var showGallery = false
+  /// @State private var selectedIndex = 0
+  /// @State private var sourceFrames: [CGRect] = []
+  ///
+  /// LazyVGrid(columns: columns) {
+  ///     ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+  ///         Image(uiImage: image)
+  ///             .readFrame { frame in
+  ///                 sourceFrames[index] = frame
+  ///             }
+  ///             .onTapGesture {
+  ///                 selectedIndex = index
+  ///                 showGallery = true
+  ///             }
+  ///     }
+  /// }
+  /// .imageGalleryViewer(
+  ///     isPresented: $showGallery,
+  ///     images: images,
+  ///     initialIndex: selectedIndex,
+  ///     sourceFrames: sourceFrames
+  /// )
+  /// ```
+  public func imageGalleryViewer(
+    isPresented: Binding<Bool>,
+    images: [UIImage],
+    initialIndex: Int = 0,
+    sourceFrames: [CGRect]? = nil,
+    configuration: ImageViewerConfiguration = .default
+  ) -> some View {
+    modifier(
+      ImageGalleryViewerModifier(
+        isPresented: isPresented,
+        images: images,
+        initialIndex: initialIndex,
+        sourceFrames: sourceFrames,
+        configuration: configuration
+      )
+    )
+  }
 }
 
 // MARK: - Configuration
@@ -105,6 +164,29 @@ private struct ImageViewerModifier: ViewModifier {
         FullScreenImageViewer(
           image: image,
           sourceFrame: frame,
+          isPresented: $isPresented,
+          configuration: configuration
+        )
+      }
+  }
+}
+
+// MARK: - Gallery View Modifier
+
+private struct ImageGalleryViewerModifier: ViewModifier {
+  @Binding var isPresented: Bool
+  let images: [UIImage]
+  let initialIndex: Int
+  let sourceFrames: [CGRect]?
+  let configuration: ImageViewerConfiguration
+
+  func body(content: Content) -> some View {
+    content
+      .windowCover(isPresented: $isPresented) {
+        ImageGalleryViewer(
+          images: images,
+          initialIndex: initialIndex,
+          sourceFrames: sourceFrames,
           isPresented: $isPresented,
           configuration: configuration
         )
