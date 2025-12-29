@@ -1,15 +1,5 @@
 import SwiftUI
 
-// MARK: - Source Frame Preference Key
-
-struct SourceFramePreferenceKey: PreferenceKey {
-  static let defaultValue: CGRect = .zero
-
-  static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-    value = nextValue()
-  }
-}
-
 // MARK: - View Extension
 
 extension View {
@@ -39,8 +29,12 @@ extension View {
     background(
       GeometryReader { geometry in
         Color.clear
-          .preference(key: SourceFramePreferenceKey.self, value: geometry.frame(in: coordinateSpace))
-          .onPreferenceChange(SourceFramePreferenceKey.self, perform: onChange)
+          .onAppear {
+            onChange(geometry.frame(in: coordinateSpace))
+          }
+          .onChange(of: geometry.frame(in: coordinateSpace)) { _, newFrame in
+            onChange(newFrame)
+          }
       }
     )
   }
