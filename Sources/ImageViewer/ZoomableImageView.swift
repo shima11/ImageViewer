@@ -94,7 +94,8 @@ struct ZoomableImageView: View {
 
   private func imageView(in geometry: GeometryProxy) -> some View {
     let finalFrame = calculateFinalFrame(in: geometry)
-    let currentFrame = calculateCurrentFrame(finalFrame: finalFrame)
+    let localSourceFrame = convertToLocalFrame(sourceFrame, in: geometry)
+    let currentFrame = calculateCurrentFrame(finalFrame: finalFrame, localSourceFrame: localSourceFrame)
     let totalOffset = CGSize(
       width: offset.width + dragOffset.width,
       height: offset.height + dragOffset.height
@@ -150,14 +151,25 @@ struct ZoomableImageView: View {
     )
   }
 
-  private func calculateCurrentFrame(finalFrame: CGRect) -> CGRect {
+  private func convertToLocalFrame(_ globalFrame: CGRect?, in geometry: GeometryProxy) -> CGRect? {
+    guard let frame = globalFrame else { return nil }
+    let geometryGlobalFrame = geometry.frame(in: .global)
+    return CGRect(
+      x: frame.origin.x - geometryGlobalFrame.origin.x,
+      y: frame.origin.y - geometryGlobalFrame.origin.y,
+      width: frame.width,
+      height: frame.height
+    )
+  }
+
+  private func calculateCurrentFrame(finalFrame: CGRect, localSourceFrame: CGRect?) -> CGRect {
     switch transitionState {
     case .appearing, .dismissing:
-      return sourceFrame ?? finalFrame
+      return localSourceFrame ?? finalFrame
     case .presented:
       return finalFrame
     case .interactive:
-      if let source = sourceFrame {
+      if let source = localSourceFrame {
         return interpolateFrame(from: finalFrame, to: source, progress: dismissProgress)
       }
       return finalFrame
