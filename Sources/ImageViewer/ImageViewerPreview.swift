@@ -149,9 +149,7 @@ private struct GalleryGridPreview: View {
           ForEach(Array(images.enumerated()), id: \.offset) { index, image in
             Image(uiImage: image)
               .resizable()
-              .aspectRatio(contentMode: .fill)
-              .frame(height: 120)
-              .clipped()
+              .aspectRatio(contentMode: .fit)
               .clipShape(RoundedRectangle(cornerRadius: 8))
               .opacity(isPresented && selectedIndex == index ? 0 : 1)
               .readFrame { frame in
@@ -202,9 +200,7 @@ private struct GalleryWithCaptionsPreview: View {
             VStack(alignment: .leading, spacing: 4) {
               Image(uiImage: image)
                 .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: 180)
-                .clipped()
+                .aspectRatio(contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .opacity(isPresented && selectedIndex == index ? 0 : 1)
                 .readFrame { frame in
