@@ -29,6 +29,8 @@ struct ImageViewerContent<
   @State private var currentIndex: Int
   @State private var transitionState: ImageTransitionState = .appearing
   @State private var hasAppeared = false
+  @State private var dragOffset: CGSize = .zero
+  @State private var dismissProgress: CGFloat = 0
 
   // MARK: - Init
 
@@ -79,7 +81,7 @@ struct ImageViewerContent<
     case .presented:
       return 1.0
     case .interactive:
-      return 0.6
+      return 1.0 - Double(dismissProgress) * 0.8
     }
   }
 
@@ -191,24 +193,20 @@ struct ImageViewerContent<
   // MARK: - Multiple Images View
 
   private var multipleImagesView: some View {
-    TabView(selection: $currentIndex) {
-      ForEach(Array(imageSources.enumerated()), id: \.offset) { index, source in
-        ImagePageView(
-          imageSource: source,
-          sourceFrame: sourceFrameForIndex(index),
-          sourceContentMode: sourceContentMode,
-          configuration: configuration,
-          isCurrentPage: index == currentIndex,
-          transitionState: $transitionState,
-          hasAppeared: $hasAppeared,
-          loadingContent: loadingContent,
-          errorContent: errorContent,
-          onDismiss: dismiss
-        )
-        .tag(index)
-      }
-    }
-    .tabViewStyle(.page(indexDisplayMode: .never))
+    MultiImageViewer(
+      imageSources: imageSources,
+      sourceFrames: sourceFrames,
+      sourceContentMode: sourceContentMode,
+      configuration: configuration,
+      currentIndex: $currentIndex,
+      transitionState: $transitionState,
+      hasAppeared: $hasAppeared,
+      dragOffset: $dragOffset,
+      dismissProgress: $dismissProgress,
+      loadingContent: loadingContent,
+      errorContent: errorContent,
+      onDismiss: dismiss
+    )
     .accessibilityElement(children: .contain)
     .accessibilityLabel(Text("Image gallery"))
     .accessibilityValue(Text("Page \(currentIndex + 1) of \(imageSources.count)"))

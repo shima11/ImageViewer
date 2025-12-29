@@ -18,6 +18,7 @@ struct ZoomableImageView: View {
   let sourceContentMode: ContentMode
   let configuration: ImageViewerConfiguration
   let isCurrentPage: Bool
+  let allowsDismissGesture: Bool
   let onDismiss: () -> Void
 
   @Binding var transitionState: ImageTransitionState
@@ -42,6 +43,7 @@ struct ZoomableImageView: View {
     sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration,
     isCurrentPage: Bool = true,
+    allowsDismissGesture: Bool = true,
     transitionState: Binding<ImageTransitionState>,
     hasAppeared: Binding<Bool>,
     onDismiss: @escaping () -> Void
@@ -51,12 +53,19 @@ struct ZoomableImageView: View {
     self.sourceContentMode = sourceContentMode
     self.configuration = configuration
     self.isCurrentPage = isCurrentPage
+    self.allowsDismissGesture = allowsDismissGesture
     self._transitionState = transitionState
     self._hasAppeared = hasAppeared
     self.onDismiss = onDismiss
   }
 
   // MARK: - Computed Properties
+
+  /// Whether drag gesture should be enabled.
+  /// Only enable when: dismiss is allowed OR zoomed in (need pan).
+  private var shouldEnableDragGesture: Bool {
+    allowsDismissGesture || scale > 1.0
+  }
 
   var backgroundOpacity: Double {
     switch transitionState {
@@ -86,11 +95,7 @@ struct ZoomableImageView: View {
       )
 
       // Single unified view structure for smooth animation
-      imageContent(params: params, finalFrame: finalFrame, in: geometry)
-        .gesture(combinedGesture(in: geometry))
-        .onTapGesture(count: 2) { location in
-          handleDoubleTap(at: location, in: geometry)
-        }
+      imageWithGestures(params: params, finalFrame: finalFrame, in: geometry)
         .accessibilityElement()
         .accessibilityLabel(Text("Image"))
         .accessibilityAddTraits(.isImage)
@@ -106,6 +111,29 @@ struct ZoomableImageView: View {
     }
     .onAppear {
       startAppearAnimation()
+    }
+  }
+
+  // MARK: - Image With Gestures
+
+  @ViewBuilder
+  private func imageWithGestures(
+    params: TransitionParams,
+    finalFrame: CGRect,
+    in geometry: GeometryProxy
+  ) -> some View {
+    let content = imageContent(params: params, finalFrame: finalFrame, in: geometry)
+      .gesture(magnificationGesture())
+      .onTapGesture(count: 2) { location in
+        handleDoubleTap(at: location, in: geometry)
+      }
+
+    // Only attach drag gesture when needed (dismiss allowed OR zoomed)
+    // This allows UIKit gestures to work in multi-image mode when not zoomed
+    if shouldEnableDragGesture {
+      content.gesture(dragGesture(in: geometry))
+    } else {
+      content
     }
   }
 
@@ -266,13 +294,6 @@ struct ZoomableImageView: View {
 
   // MARK: - Gestures
 
-  private func combinedGesture(in geometry: GeometryProxy) -> some Gesture {
-    SimultaneousGesture(
-      magnificationGesture(),
-      dragGesture(in: geometry)
-    )
-  }
-
   private func magnificationGesture() -> some Gesture {
     MagnifyGesture()
       .onChanged { value in
@@ -297,6 +318,9 @@ struct ZoomableImageView: View {
         guard transitionState == .presented || transitionState == .interactive else { return }
 
         if scale <= 1.0 {
+          // Only handle dismiss gesture if allowed
+          guard allowsDismissGesture else { return }
+
           transitionState = .interactive
           dragOffset = value.translation
           let progress = abs(value.translation.height) / 300
@@ -310,6 +334,9 @@ struct ZoomableImageView: View {
       }
       .onEnded { value in
         if scale <= 1.0 {
+          // Only handle dismiss gesture if allowed
+          guard allowsDismissGesture else { return }
+
           let shouldDismiss = abs(value.translation.height) > configuration.dismissThreshold
             || abs(value.velocity.height) > configuration.dismissVelocityThreshold
 

@@ -178,7 +178,12 @@ private struct GalleryGridPreview: View {
         images: images,
         initialIndex: selectedIndex,
         sourceFrames: sourceFrames,
-        sourceContentMode: .fill
+        sourceContentMode: .fill,
+        configuration: ImageViewerConfiguration(
+          onPageChange: { newIndex in
+            selectedIndex = newIndex
+          }
+        )
       )
     }
   }
@@ -238,7 +243,12 @@ private struct GalleryWithCaptionsPreview: View {
         images: images,
         initialIndex: selectedIndex,
         sourceFrames: sourceFrames,
-        sourceContentMode: .fill
+        sourceContentMode: .fill,
+        configuration: ImageViewerConfiguration(
+          onPageChange: { newIndex in
+            selectedIndex = newIndex
+          }
+        )
       ) { context in
         VStack {
           Spacer()
@@ -525,7 +535,12 @@ private struct FillModeTransitionPreview: View {
         images: images,
         initialIndex: selectedIndex,
         sourceFrames: sourceFrames,
-        sourceContentMode: .fill
+        sourceContentMode: .fill,
+        configuration: ImageViewerConfiguration(
+          onPageChange: { newIndex in
+            selectedIndex = newIndex
+          }
+        )
       )
     }
   }
