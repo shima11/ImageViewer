@@ -3,138 +3,46 @@ import SwiftUI
 // MARK: - Image Gallery Viewer
 
 /// A full-screen gallery viewer with swipe navigation between multiple images.
-struct ImageGalleryViewer: View {
-  let images: [UIImage]
+struct ImageGalleryViewer<Overlay: View>: View {
+  let imageSources: [ImageSource]
   let initialIndex: Int
   let sourceFrames: [CGRect]?
   @Binding var isPresented: Bool
   let configuration: ImageViewerConfiguration
+  let overlay: (Int) -> Overlay
 
   // MARK: - State
 
   @State private var currentIndex: Int
+  @State private var transitionState: ImageTransitionState = .appearing
   @State private var hasAppeared = false
 
   // MARK: - Init
 
   init(
-    images: [UIImage],
+    imageSources: [ImageSource],
     initialIndex: Int,
     sourceFrames: [CGRect]?,
     isPresented: Binding<Bool>,
-    configuration: ImageViewerConfiguration
+    configuration: ImageViewerConfiguration,
+    @ViewBuilder overlay: @escaping (Int) -> Overlay
   ) {
-    self.images = images
-    self.initialIndex = initialIndex
+    self.imageSources = imageSources
+    // Validate initialIndex
+    let validIndex = max(0, min(initialIndex, max(0, imageSources.count - 1)))
+    self.initialIndex = validIndex
     self.sourceFrames = sourceFrames
     self._isPresented = isPresented
     self.configuration = configuration
-    self._currentIndex = State(initialValue: initialIndex)
+    self.overlay = overlay
+    self._currentIndex = State(initialValue: validIndex)
   }
 
   // MARK: - Computed Properties
 
-  private var currentSourceFrame: CGRect? {
-    guard let frames = sourceFrames, currentIndex < frames.count else {
-      return nil
-    }
-    return frames[currentIndex]
+  private var showsControls: Bool {
+    transitionState == .presented || transitionState == .interactive
   }
-
-  // MARK: - Body
-
-  var body: some View {
-    ZStack {
-      // Background
-      configuration.backgroundColor
-        .ignoresSafeArea()
-        .opacity(hasAppeared ? 1 : 0)
-
-      // Image pages
-      TabView(selection: $currentIndex) {
-        ForEach(Array(images.enumerated()), id: \.offset) { index, image in
-          ImagePageView(
-            image: image,
-            sourceFrame: sourceFrameForIndex(index),
-            isPresented: $isPresented,
-            configuration: configuration,
-            isCurrentPage: index == currentIndex,
-            hasAppeared: $hasAppeared
-          )
-          .tag(index)
-        }
-      }
-      .tabViewStyle(.page(indexDisplayMode: .never))
-
-      // Page indicator
-      if images.count > 1 {
-        pageIndicator
-      }
-    }
-    .ignoresSafeArea()
-    .statusBarHidden()
-  }
-
-  // MARK: - Page Indicator
-
-  private var pageIndicator: some View {
-    VStack {
-      Spacer()
-      HStack(spacing: 6) {
-        ForEach(0..<images.count, id: \.self) { index in
-          Circle()
-            .fill(index == currentIndex ? Color.white : Color.white.opacity(0.5))
-            .frame(width: 6, height: 6)
-        }
-      }
-      .padding(.bottom, 50)
-    }
-    .opacity(hasAppeared ? 1 : 0)
-  }
-
-  // MARK: - Helpers
-
-  private func sourceFrameForIndex(_ index: Int) -> CGRect? {
-    guard let frames = sourceFrames, index < frames.count else {
-      return nil
-    }
-    return frames[index]
-  }
-}
-
-// MARK: - Image Page View
-
-/// Individual page in the gallery, wrapping FullScreenImageViewer functionality.
-private struct ImagePageView: View {
-  let image: UIImage
-  let sourceFrame: CGRect?
-  @Binding var isPresented: Bool
-  let configuration: ImageViewerConfiguration
-  let isCurrentPage: Bool
-  @Binding var hasAppeared: Bool
-
-  // MARK: - Transition State
-
-  enum TransitionState {
-    case appearing
-    case presented
-    case dismissing
-    case interactive
-  }
-
-  // MARK: - State
-
-  @State private var transitionState: TransitionState = .appearing
-  @State private var scale: CGFloat = 1.0
-  @State private var lastScale: CGFloat = 1.0
-  @State private var offset: CGSize = .zero
-  @State private var lastOffset: CGSize = .zero
-  @State private var dragOffset: CGSize = .zero
-  @State private var dismissProgress: CGFloat = 0
-
-  private let minScale: CGFloat = 1.0
-
-  // MARK: - Computed Properties
 
   private var backgroundOpacity: Double {
     switch transitionState {
@@ -143,153 +51,135 @@ private struct ImagePageView: View {
     case .presented:
       return 1.0
     case .interactive:
-      return 1.0 - Double(dismissProgress) * 0.8
+      return 0.6
     }
-  }
-
-  private var showCloseButton: Bool {
-    transitionState == .presented || transitionState == .interactive
   }
 
   // MARK: - Body
 
   var body: some View {
-    GeometryReader { geometry in
-      ZStack {
-        // Tap to dismiss background
-        Color.clear
-          .contentShape(Rectangle())
-          .onTapGesture {
-            dismissToSource()
-          }
-
-        // Image with zoom transition
-        imageView(in: geometry)
+    Group {
+      if imageSources.isEmpty {
+        emptyStateView
+      } else {
+        galleryContent
       }
     }
-    .overlay(alignment: .topTrailing) {
-      closeButton
+    .ignoresSafeArea()
+    .statusBarHidden()
+    .accessibilityAction(.escape) {
+      dismiss()
     }
-    .onChange(of: isCurrentPage) { _, newValue in
-      if newValue {
-        // Reset zoom when becoming current page
-        withAnimation(.spring(duration: 0.3)) {
-          scale = 1.0
-          lastScale = 1.0
-          offset = .zero
-          lastOffset = .zero
+    .onChange(of: currentIndex) { oldValue, newValue in
+      if oldValue != newValue {
+        configuration.onPageChange?(newValue)
+      }
+    }
+  }
+
+  // MARK: - Empty State
+
+  private var emptyStateView: some View {
+    ZStack {
+      configuration.backgroundColor
+        .ignoresSafeArea()
+
+      VStack(spacing: 16) {
+        Image(systemName: "photo.on.rectangle.angled")
+          .font(.largeTitle)
+          .foregroundStyle(.white.opacity(0.6))
+
+        Text("No images")
+          .foregroundStyle(.white.opacity(0.8))
+      }
+    }
+    .onTapGesture {
+      isPresented = false
+      configuration.onDismiss?()
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Text("No images available"))
+    .accessibilityHint(Text("Tap to close"))
+  }
+
+  // MARK: - Gallery Content
+
+  private var galleryContent: some View {
+    ZStack {
+      // Background
+      configuration.backgroundColor
+        .opacity(backgroundOpacity)
+        .ignoresSafeArea()
+        .onTapGesture {
+          dismiss()
+        }
+
+      // Image pages
+      TabView(selection: $currentIndex) {
+        ForEach(Array(imageSources.enumerated()), id: \.offset) { index, source in
+          GalleryPageView(
+            imageSource: source,
+            sourceFrame: sourceFrameForIndex(index),
+            configuration: configuration,
+            isCurrentPage: index == currentIndex,
+            transitionState: $transitionState,
+            hasAppeared: $hasAppeared,
+            onDismiss: dismiss
+          )
+          .tag(index)
         }
       }
-    }
-    .onAppear {
-      guard transitionState == .appearing else { return }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-        withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
-          transitionState = .presented
-          hasAppeared = true
-        }
+      .tabViewStyle(.page(indexDisplayMode: .never))
+      .accessibilityElement(children: .contain)
+      .accessibilityLabel(Text("Image gallery"))
+      .accessibilityValue(Text("Page \(currentIndex + 1) of \(imageSources.count)"))
+
+      // Overlay
+      overlay(currentIndex)
+        .opacity(showsControls ? 1 : 0)
+
+      // Page indicator
+      if imageSources.count > 1 {
+        pageIndicator
       }
     }
-  }
-
-  // MARK: - Image View
-
-  private func imageView(in geometry: GeometryProxy) -> some View {
-    let finalFrame = calculateFinalFrame(in: geometry)
-    let currentFrame = calculateCurrentFrame(finalFrame: finalFrame)
-    let totalOffset = CGSize(
-      width: offset.width + dragOffset.width,
-      height: offset.height + dragOffset.height
-    )
-
-    return Image(uiImage: image)
-      .resizable()
-      .aspectRatio(contentMode: .fit)
-      .frame(width: currentFrame.width, height: currentFrame.height)
-      .clipped()
-      .clipShape(RoundedRectangle(cornerRadius: cornerRadius(for: transitionState)))
-      .scaleEffect(scale)
-      .position(
-        x: currentFrame.midX + totalOffset.width,
-        y: currentFrame.midY + totalOffset.height
-      )
-      .gesture(combinedGesture(in: geometry))
-      .onTapGesture(count: 2) { location in
-        handleDoubleTap(at: location, in: geometry)
+    .overlay(alignment: closeButtonAlignment) {
+      if configuration.closeButton.isVisible {
+        closeButton
       }
-  }
-
-  private func calculateFinalFrame(in geometry: GeometryProxy) -> CGRect {
-    let screenSize = geometry.size
-    let imageAspect = image.size.width / image.size.height
-    let screenAspect = screenSize.width / screenSize.height
-
-    let finalSize: CGSize
-    if imageAspect > screenAspect {
-      finalSize = CGSize(width: screenSize.width, height: screenSize.width / imageAspect)
-    } else {
-      finalSize = CGSize(width: screenSize.height * imageAspect, height: screenSize.height)
     }
-
-    return CGRect(
-      x: (screenSize.width - finalSize.width) / 2,
-      y: (screenSize.height - finalSize.height) / 2,
-      width: finalSize.width,
-      height: finalSize.height
-    )
-  }
-
-  private func calculateCurrentFrame(finalFrame: CGRect) -> CGRect {
-    switch transitionState {
-    case .appearing, .dismissing:
-      return sourceFrame ?? finalFrame
-    case .presented:
-      return finalFrame
-    case .interactive:
-      if let source = sourceFrame {
-        return interpolateFrame(from: finalFrame, to: source, progress: dismissProgress)
-      }
-      return finalFrame
-    }
-  }
-
-  private func cornerRadius(for state: TransitionState) -> CGFloat {
-    switch state {
-    case .appearing, .dismissing:
-      return 8
-    case .presented, .interactive:
-      return 0
-    }
-  }
-
-  private func interpolateFrame(from: CGRect, to: CGRect, progress: CGFloat) -> CGRect {
-    let p = min(max(progress, 0), 1)
-    return CGRect(
-      x: from.origin.x + (to.origin.x - from.origin.x) * p,
-      y: from.origin.y + (to.origin.y - from.origin.y) * p,
-      width: from.width + (to.width - from.width) * p,
-      height: from.height + (to.height - from.height) * p
-    )
   }
 
   // MARK: - Close Button
 
+  private var closeButtonAlignment: Alignment {
+    switch configuration.closeButton.position {
+    case .topLeading:
+      return .topLeading
+    case .topTrailing:
+      return .topTrailing
+    }
+  }
+
   private var closeButton: some View {
     Button {
-      dismissToSource()
+      dismiss()
     } label: {
-      ZStack {
-        Image(systemName: "xmark.circle.fill")
-          .font(.title)
-          .symbolRenderingMode(.palette)
-          .foregroundStyle(.white, .black.opacity(0.5))
-          .frame(width: 44, height: 44)
-      }
+      Image(systemName: "xmark.circle.fill")
+        .font(.title)
+        .symbolRenderingMode(.palette)
+        .foregroundStyle(.white, .black.opacity(0.5))
+        .frame(width: 44, height: 44)
     }
-    .padding(.top, 8)
-    .padding(.trailing, 8)
+    .padding(8)
     .padding(.top, safeAreaInsets.top)
-    .opacity(showCloseButton ? 1.0 - Double(dismissProgress) : 0.0)
+    .padding(
+      configuration.closeButton.position == .topLeading ? .leading : .trailing,
+      8
+    )
+    .opacity(showsControls ? 1.0 : 0.0)
+    .accessibilityLabel(Text("Close"))
+    .accessibilityHint(Text("Closes the image gallery"))
   }
 
   private var safeAreaInsets: UIEdgeInsets {
@@ -301,129 +191,224 @@ private struct ImagePageView: View {
       .safeAreaInsets ?? .zero
   }
 
-  // MARK: - Dismiss
+  // MARK: - Page Indicator
 
-  private func dismissToSource() {
-    withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
-      transitionState = .dismissing
-      scale = 1.0
-      offset = .zero
-      dragOffset = .zero
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-      isPresented = false
+  @ViewBuilder
+  private var pageIndicator: some View {
+    switch configuration.pageIndicator.style {
+    case .dots:
+      dotsIndicator
+    case .text:
+      textIndicator
+    case .none:
+      EmptyView()
     }
   }
 
-  // MARK: - Gestures
-
-  private func combinedGesture(in geometry: GeometryProxy) -> some Gesture {
-    SimultaneousGesture(
-      magnificationGesture(),
-      dragGesture(in: geometry)
-    )
-  }
-
-  private func magnificationGesture() -> some Gesture {
-    MagnifyGesture()
-      .onChanged { value in
-        guard transitionState == .presented || transitionState == .interactive else { return }
-        let newScale = lastScale * value.magnification
-        scale = min(max(newScale, minScale * 0.5), configuration.maxScale)
-      }
-      .onEnded { _ in
-        withAnimation(.spring(duration: 0.3)) {
-          if scale < minScale {
-            scale = minScale
-            offset = .zero
-          }
-          lastScale = scale
+  private var dotsIndicator: some View {
+    VStack {
+      Spacer()
+      HStack(spacing: 6) {
+        ForEach(0..<imageSources.count, id: \.self) { index in
+          Circle()
+            .fill(
+              index == currentIndex
+                ? configuration.pageIndicator.currentPageColor
+                : configuration.pageIndicator.pageColor
+            )
+            .frame(width: 6, height: 6)
         }
       }
-  }
-
-  private func dragGesture(in geometry: GeometryProxy) -> some Gesture {
-    DragGesture()
-      .onChanged { value in
-        guard transitionState == .presented || transitionState == .interactive else { return }
-
-        if scale <= 1.0 {
-          // Interactive dismiss gesture
-          transitionState = .interactive
-          dragOffset = value.translation
-          let progress = abs(value.translation.height) / 300
-          dismissProgress = min(progress, 1.0)
-        } else {
-          // Pan gesture when zoomed
-          offset = CGSize(
-            width: lastOffset.width + value.translation.width / scale,
-            height: lastOffset.height + value.translation.height / scale
-          )
-        }
-      }
-      .onEnded { value in
-        if scale <= 1.0 {
-          let shouldDismiss = abs(value.translation.height) > configuration.dismissThreshold
-            || abs(value.velocity.height) > configuration.dismissVelocityThreshold
-
-          if shouldDismiss {
-            dismissToSource()
-          } else {
-            withAnimation(.spring(duration: 0.3)) {
-              transitionState = .presented
-              dragOffset = .zero
-              dismissProgress = 0
-            }
-          }
-        } else {
-          lastOffset = offset
-          withAnimation(.spring(duration: 0.3)) {
-            limitOffset(in: geometry)
-          }
-        }
-      }
-  }
-
-  // MARK: - Double Tap
-
-  private func handleDoubleTap(at location: CGPoint, in geometry: GeometryProxy) {
-    guard transitionState == .presented else { return }
-
-    withAnimation(.spring(duration: 0.3)) {
-      if scale > minScale {
-        scale = minScale
-        lastScale = minScale
-        offset = .zero
-        lastOffset = .zero
-      } else {
-        scale = configuration.doubleTapScale
-        lastScale = configuration.doubleTapScale
-
-        let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-        let offsetX = (center.x - location.x) / configuration.doubleTapScale
-        let offsetY = (center.y - location.y) / configuration.doubleTapScale
-        offset = CGSize(width: offsetX, height: offsetY)
-        lastOffset = offset
-      }
+      .padding(.bottom, 50)
     }
+    .opacity(showsControls ? 1 : 0)
+    .accessibilityHidden(true)
+  }
+
+  private var textIndicator: some View {
+    VStack {
+      Spacer()
+      Text("\(currentIndex + 1) / \(imageSources.count)")
+        .font(.subheadline.monospacedDigit())
+        .foregroundStyle(configuration.pageIndicator.currentPageColor)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.5), in: Capsule())
+        .padding(.bottom, 50)
+    }
+    .opacity(showsControls ? 1 : 0)
+    .accessibilityHidden(true)
   }
 
   // MARK: - Helpers
 
-  private func limitOffset(in geometry: GeometryProxy) {
-    let maxOffsetX = max(0, (geometry.size.width * (scale - 1)) / (2 * scale))
-    let maxOffsetY = max(0, (geometry.size.height * (scale - 1)) / (2 * scale))
+  private func sourceFrameForIndex(_ index: Int) -> CGRect? {
+    guard let frames = sourceFrames, index < frames.count else {
+      return nil
+    }
+    return frames[index]
+  }
 
-    offset.width = min(max(offset.width, -maxOffsetX), maxOffsetX)
-    offset.height = min(max(offset.height, -maxOffsetY), maxOffsetY)
-    lastOffset = offset
+  private func dismiss() {
+    withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
+      transitionState = .dismissing
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+      isPresented = false
+      configuration.onDismiss?()
+    }
+  }
+}
+
+// MARK: - Gallery Page View
+
+/// Individual page in the gallery with image loading support.
+private struct GalleryPageView: View {
+  let imageSource: ImageSource
+  let sourceFrame: CGRect?
+  let configuration: ImageViewerConfiguration
+  let isCurrentPage: Bool
+  @Binding var transitionState: ImageTransitionState
+  @Binding var hasAppeared: Bool
+  let onDismiss: () -> Void
+
+  @State private var loadedImage: UIImage?
+  @State private var isLoading = false
+  @State private var loadError: Error?
+
+  private var displayImage: UIImage? {
+    switch imageSource {
+    case .image(let image):
+      return image
+    case .url, .async:
+      return loadedImage ?? imageSource.placeholder
+    }
+  }
+
+  var body: some View {
+    Group {
+      if let image = displayImage {
+        ZoomableImageView(
+          image: image,
+          sourceFrame: sourceFrame,
+          configuration: configuration,
+          isCurrentPage: isCurrentPage,
+          transitionState: $transitionState,
+          hasAppeared: $hasAppeared,
+          onDismiss: onDismiss
+        )
+      } else if isLoading {
+        ProgressView()
+          .tint(.white)
+      } else if loadError != nil {
+        errorView
+      }
+    }
+    .task {
+      await loadImageIfNeeded()
+    }
+  }
+
+  private var errorView: some View {
+    VStack(spacing: 16) {
+      Image(systemName: "exclamationmark.triangle")
+        .font(.largeTitle)
+        .foregroundStyle(.white.opacity(0.6))
+
+      Text("Failed to load image")
+        .foregroundStyle(.white.opacity(0.8))
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Text("Failed to load image"))
+  }
+
+  private func loadImageIfNeeded() async {
+    switch imageSource {
+    case .image:
+      break
+
+    case .url(let url, _):
+      await loadImage(from: url)
+
+    case .async(let loader, _):
+      await loadImage(using: loader)
+    }
+  }
+
+  private func loadImage(from url: URL) async {
+    isLoading = true
+    defer { isLoading = false }
+
+    do {
+      let (data, _) = try await URLSession.shared.data(from: url)
+      if let image = UIImage(data: data) {
+        loadedImage = image
+      } else {
+        loadError = ImageLoadingError.invalidData
+      }
+    } catch {
+      loadError = error
+    }
+  }
+
+  private func loadImage(using loader: @Sendable () async throws -> UIImage) async {
+    isLoading = true
+    defer { isLoading = false }
+
+    do {
+      loadedImage = try await loader()
+    } catch {
+      loadError = error
+    }
+  }
+}
+
+// MARK: - Convenience Init (No Overlay)
+
+extension ImageGalleryViewer where Overlay == EmptyView {
+  init(
+    imageSources: [ImageSource],
+    initialIndex: Int,
+    sourceFrames: [CGRect]?,
+    isPresented: Binding<Bool>,
+    configuration: ImageViewerConfiguration
+  ) {
+    self.init(
+      imageSources: imageSources,
+      initialIndex: initialIndex,
+      sourceFrames: sourceFrames,
+      isPresented: isPresented,
+      configuration: configuration,
+      overlay: { _ in EmptyView() }
+    )
+  }
+
+  /// Legacy initializer for UIImage array.
+  init(
+    images: [UIImage],
+    initialIndex: Int,
+    sourceFrames: [CGRect]?,
+    isPresented: Binding<Bool>,
+    configuration: ImageViewerConfiguration
+  ) {
+    self.init(
+      imageSources: images.map { .image($0) },
+      initialIndex: initialIndex,
+      sourceFrames: sourceFrames,
+      isPresented: isPresented,
+      configuration: configuration
+    )
   }
 }
 
 // MARK: - Preview
 
-#Preview {
+#Preview("Gallery") {
   ImageGalleryViewerPreview()
+}
+
+#Preview("Empty Gallery") {
+  EmptyGalleryPreview()
 }
 
 private struct ImageGalleryViewerPreview: View {
@@ -462,7 +447,6 @@ private struct ImageGalleryViewerPreview: View {
           options: []
         )
 
-        // Draw page number
         let text = "\(index + 1)" as NSString
         let attributes: [NSAttributedString.Key: Any] = [
           .font: UIFont.systemFont(ofSize: 200, weight: .bold),
@@ -478,5 +462,19 @@ private struct ImageGalleryViewerPreview: View {
         text.draw(in: textRect, withAttributes: attributes)
       }
     }
+  }
+}
+
+private struct EmptyGalleryPreview: View {
+  @State private var isPresented = true
+
+  var body: some View {
+    ImageGalleryViewer(
+      images: [],
+      initialIndex: 0,
+      sourceFrames: nil,
+      isPresented: $isPresented,
+      configuration: .default
+    )
   }
 }

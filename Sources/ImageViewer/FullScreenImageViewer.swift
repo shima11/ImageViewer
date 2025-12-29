@@ -3,34 +3,47 @@ import SwiftUI
 // MARK: - Full Screen Image Viewer
 
 /// A full-screen image viewer with zoom and interactive dismiss support.
-struct FullScreenImageViewer: View {
-  let image: UIImage
+struct FullScreenImageViewer<Overlay: View>: View {
+  let imageSource: ImageSource
   let sourceFrame: CGRect?
   @Binding var isPresented: Bool
   let configuration: ImageViewerConfiguration
-
-  // MARK: - Transition State
-
-  enum TransitionState {
-    case appearing
-    case presented
-    case dismissing
-    case interactive
-  }
+  let overlay: () -> Overlay
 
   // MARK: - State
 
-  @State private var transitionState: TransitionState = .appearing
-  @State private var scale: CGFloat = 1.0
-  @State private var lastScale: CGFloat = 1.0
-  @State private var offset: CGSize = .zero
-  @State private var lastOffset: CGSize = .zero
-  @State private var dragOffset: CGSize = .zero
-  @State private var dismissProgress: CGFloat = 0
+  @State private var transitionState: ImageTransitionState = .appearing
+  @State private var hasAppeared = false
+  @State private var loadedImage: UIImage?
+  @State private var isLoading = false
+  @State private var loadError: Error?
 
-  private let minScale: CGFloat = 1.0
+  // MARK: - Init
+
+  init(
+    imageSource: ImageSource,
+    sourceFrame: CGRect?,
+    isPresented: Binding<Bool>,
+    configuration: ImageViewerConfiguration,
+    @ViewBuilder overlay: @escaping () -> Overlay
+  ) {
+    self.imageSource = imageSource
+    self.sourceFrame = sourceFrame
+    self._isPresented = isPresented
+    self.configuration = configuration
+    self.overlay = overlay
+  }
 
   // MARK: - Computed Properties
+
+  private var displayImage: UIImage? {
+    switch imageSource {
+    case .image(let image):
+      return image
+    case .url, .async:
+      return loadedImage ?? imageSource.placeholder
+    }
+  }
 
   private var backgroundOpacity: Double {
     switch transitionState {
@@ -39,11 +52,11 @@ struct FullScreenImageViewer: View {
     case .presented:
       return 1.0
     case .interactive:
-      return 1.0 - Double(dismissProgress) * 0.8
+      return 0.6
     }
   }
 
-  private var showCloseButton: Bool {
+  private var showsControls: Bool {
     transitionState == .presented || transitionState == .interactive
   }
 
@@ -57,126 +70,76 @@ struct FullScreenImageViewer: View {
           .opacity(backgroundOpacity)
           .ignoresSafeArea()
           .onTapGesture {
-            dismissToSource()
+            dismiss()
           }
 
-        // Image with zoom transition
-        imageView(in: geometry)
+        // Content
+        if let image = displayImage {
+          ZoomableImageView(
+            image: image,
+            sourceFrame: sourceFrame,
+            configuration: configuration,
+            transitionState: $transitionState,
+            hasAppeared: $hasAppeared,
+            onDismiss: dismiss
+          )
+        } else if isLoading {
+          ProgressView()
+            .tint(.white)
+        } else if loadError != nil {
+          errorView
+        }
+
+        // Overlay
+        overlay()
+          .opacity(showsControls ? 1 : 0)
       }
     }
-    .overlay(alignment: .topTrailing) {
-      closeButton
+    .overlay(alignment: closeButtonAlignment) {
+      if configuration.closeButton.isVisible {
+        closeButton
+      }
     }
     .ignoresSafeArea()
     .statusBarHidden()
-    .onAppear {
-      // Start appear animation after a brief delay
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-        withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
-          transitionState = .presented
-        }
-      }
+    .accessibilityAction(.escape) {
+      dismiss()
     }
-  }
-
-  // MARK: - Image View
-
-  private func imageView(in geometry: GeometryProxy) -> some View {
-    let finalFrame = calculateFinalFrame(in: geometry)
-    let currentFrame = calculateCurrentFrame(finalFrame: finalFrame)
-    let totalOffset = CGSize(
-      width: offset.width + dragOffset.width,
-      height: offset.height + dragOffset.height
-    )
-
-    return Image(uiImage: image)
-      .resizable()
-      .aspectRatio(contentMode: .fit)
-      .frame(width: currentFrame.width, height: currentFrame.height)
-      .clipped()
-      .clipShape(RoundedRectangle(cornerRadius: cornerRadius(for: transitionState)))
-      .scaleEffect(scale)
-      .position(
-        x: currentFrame.midX + totalOffset.width,
-        y: currentFrame.midY + totalOffset.height
-      )
-      .gesture(combinedGesture(in: geometry))
-      .onTapGesture(count: 2) { location in
-        handleDoubleTap(at: location, in: geometry)
-      }
-  }
-
-  private func calculateFinalFrame(in geometry: GeometryProxy) -> CGRect {
-    let screenSize = geometry.size
-    let imageAspect = image.size.width / image.size.height
-    let screenAspect = screenSize.width / screenSize.height
-
-    let finalSize: CGSize
-    if imageAspect > screenAspect {
-      finalSize = CGSize(width: screenSize.width, height: screenSize.width / imageAspect)
-    } else {
-      finalSize = CGSize(width: screenSize.height * imageAspect, height: screenSize.height)
+    .task {
+      await loadImageIfNeeded()
     }
-
-    return CGRect(
-      x: (screenSize.width - finalSize.width) / 2,
-      y: (screenSize.height - finalSize.height) / 2,
-      width: finalSize.width,
-      height: finalSize.height
-    )
-  }
-
-  private func calculateCurrentFrame(finalFrame: CGRect) -> CGRect {
-    switch transitionState {
-    case .appearing, .dismissing:
-      return sourceFrame ?? finalFrame
-    case .presented:
-      return finalFrame
-    case .interactive:
-      if let source = sourceFrame {
-        return interpolateFrame(from: finalFrame, to: source, progress: dismissProgress)
-      }
-      return finalFrame
-    }
-  }
-
-  private func cornerRadius(for state: TransitionState) -> CGFloat {
-    switch state {
-    case .appearing, .dismissing:
-      return 8
-    case .presented, .interactive:
-      return 0
-    }
-  }
-
-  private func interpolateFrame(from: CGRect, to: CGRect, progress: CGFloat) -> CGRect {
-    let p = min(max(progress, 0), 1)
-    return CGRect(
-      x: from.origin.x + (to.origin.x - from.origin.x) * p,
-      y: from.origin.y + (to.origin.y - from.origin.y) * p,
-      width: from.width + (to.width - from.width) * p,
-      height: from.height + (to.height - from.height) * p
-    )
   }
 
   // MARK: - Close Button
 
+  private var closeButtonAlignment: Alignment {
+    switch configuration.closeButton.position {
+    case .topLeading:
+      return .topLeading
+    case .topTrailing:
+      return .topTrailing
+    }
+  }
+
   private var closeButton: some View {
     Button {
-      dismissToSource()
+      dismiss()
     } label: {
-      ZStack {
-        Image(systemName: "xmark.circle.fill")
-          .font(.title)
-          .symbolRenderingMode(.palette)
-          .foregroundStyle(.white, .black.opacity(0.5))
-          .frame(width: 44, height: 44)
-      }
+      Image(systemName: "xmark.circle.fill")
+        .font(.title)
+        .symbolRenderingMode(.palette)
+        .foregroundStyle(.white, .black.opacity(0.5))
+        .frame(width: 44, height: 44)
     }
-    .padding(.top, 8)
-    .padding(.trailing, 8)
+    .padding(8)
     .padding(.top, safeAreaInsets.top)
-    .opacity(showCloseButton ? 1.0 - Double(dismissProgress) : 0.0)
+    .padding(
+      configuration.closeButton.position == .topLeading ? .leading : .trailing,
+      8
+    )
+    .opacity(showsControls ? 1.0 : 0.0)
+    .accessibilityLabel(Text("Close"))
+    .accessibilityHint(Text("Closes the image viewer"))
   }
 
   private var safeAreaInsets: UIEdgeInsets {
@@ -188,127 +151,120 @@ struct FullScreenImageViewer: View {
       .safeAreaInsets ?? .zero
   }
 
-  // MARK: - Dismiss
+  // MARK: - Error View
 
-  private func dismissToSource() {
-    // Animate the image back to source position
+  private var errorView: some View {
+    VStack(spacing: 16) {
+      Image(systemName: "exclamationmark.triangle")
+        .font(.largeTitle)
+        .foregroundStyle(.white.opacity(0.6))
+
+      Text("Failed to load image")
+        .foregroundStyle(.white.opacity(0.8))
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Text("Failed to load image"))
+  }
+
+  // MARK: - Actions
+
+  private func dismiss() {
     withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
       transitionState = .dismissing
-      scale = 1.0
-      offset = .zero
-      dragOffset = .zero
     }
-    // Wait for animation to complete before hiding the window
-    // This prevents flickering by ensuring the window image is at source position
-    // before the source image becomes visible again
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
       isPresented = false
+      configuration.onDismiss?()
     }
   }
 
-  // MARK: - Gestures
+  // MARK: - Image Loading
 
-  private func combinedGesture(in geometry: GeometryProxy) -> some Gesture {
-    SimultaneousGesture(
-      magnificationGesture(),
-      dragGesture(in: geometry)
+  private func loadImageIfNeeded() async {
+    switch imageSource {
+    case .image:
+      break
+
+    case .url(let url, _):
+      await loadImage(from: url)
+
+    case .async(let loader, _):
+      await loadImage(using: loader)
+    }
+  }
+
+  private func loadImage(from url: URL) async {
+    isLoading = true
+    defer { isLoading = false }
+
+    do {
+      let (data, _) = try await URLSession.shared.data(from: url)
+      if let image = UIImage(data: data) {
+        loadedImage = image
+      } else {
+        loadError = ImageLoadingError.invalidData
+      }
+    } catch {
+      loadError = error
+    }
+  }
+
+  private func loadImage(using loader: @Sendable () async throws -> UIImage) async {
+    isLoading = true
+    defer { isLoading = false }
+
+    do {
+      loadedImage = try await loader()
+    } catch {
+      loadError = error
+    }
+  }
+}
+
+// MARK: - Convenience Init (No Overlay)
+
+extension FullScreenImageViewer where Overlay == EmptyView {
+  init(
+    imageSource: ImageSource,
+    sourceFrame: CGRect?,
+    isPresented: Binding<Bool>,
+    configuration: ImageViewerConfiguration
+  ) {
+    self.init(
+      imageSource: imageSource,
+      sourceFrame: sourceFrame,
+      isPresented: isPresented,
+      configuration: configuration,
+      overlay: { EmptyView() }
     )
   }
 
-  private func magnificationGesture() -> some Gesture {
-    MagnifyGesture()
-      .onChanged { value in
-        guard transitionState == .presented || transitionState == .interactive else { return }
-        let newScale = lastScale * value.magnification
-        scale = min(max(newScale, minScale * 0.5), configuration.maxScale)
-      }
-      .onEnded { _ in
-        withAnimation(.spring(duration: 0.3)) {
-          if scale < minScale {
-            scale = minScale
-            offset = .zero
-          }
-          lastScale = scale
-        }
-      }
+  /// Legacy initializer for UIImage.
+  init(
+    image: UIImage,
+    sourceFrame: CGRect?,
+    isPresented: Binding<Bool>,
+    configuration: ImageViewerConfiguration
+  ) {
+    self.init(
+      imageSource: .image(image),
+      sourceFrame: sourceFrame,
+      isPresented: isPresented,
+      configuration: configuration
+    )
   }
+}
 
-  private func dragGesture(in geometry: GeometryProxy) -> some Gesture {
-    DragGesture()
-      .onChanged { value in
-        guard transitionState == .presented || transitionState == .interactive else { return }
+// MARK: - Error
 
-        if scale <= 1.0 {
-          // Interactive dismiss gesture
-          transitionState = .interactive
-          dragOffset = value.translation
-          let progress = abs(value.translation.height) / 300
-          dismissProgress = min(progress, 1.0)
-        } else {
-          // Pan gesture when zoomed
-          offset = CGSize(
-            width: lastOffset.width + value.translation.width / scale,
-            height: lastOffset.height + value.translation.height / scale
-          )
-        }
-      }
-      .onEnded { value in
-        if scale <= 1.0 {
-          // Check if should dismiss
-          let shouldDismiss = abs(value.translation.height) > configuration.dismissThreshold
-            || abs(value.velocity.height) > configuration.dismissVelocityThreshold
+enum ImageLoadingError: Error, LocalizedError {
+  case invalidData
 
-          if shouldDismiss {
-            dismissToSource()
-          } else {
-            withAnimation(.spring(duration: 0.3)) {
-              transitionState = .presented
-              dragOffset = .zero
-              dismissProgress = 0
-            }
-          }
-        } else {
-          lastOffset = offset
-          withAnimation(.spring(duration: 0.3)) {
-            limitOffset(in: geometry)
-          }
-        }
-      }
-  }
-
-  // MARK: - Double Tap
-
-  private func handleDoubleTap(at location: CGPoint, in geometry: GeometryProxy) {
-    guard transitionState == .presented else { return }
-
-    withAnimation(.spring(duration: 0.3)) {
-      if scale > minScale {
-        scale = minScale
-        lastScale = minScale
-        offset = .zero
-        lastOffset = .zero
-      } else {
-        scale = configuration.doubleTapScale
-        lastScale = configuration.doubleTapScale
-
-        let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-        let offsetX = (center.x - location.x) / configuration.doubleTapScale
-        let offsetY = (center.y - location.y) / configuration.doubleTapScale
-        offset = CGSize(width: offsetX, height: offsetY)
-        lastOffset = offset
-      }
+  var errorDescription: String? {
+    switch self {
+    case .invalidData:
+      return "The image data is invalid or corrupted."
     }
-  }
-
-  // MARK: - Helpers
-
-  private func limitOffset(in geometry: GeometryProxy) {
-    let maxOffsetX = max(0, (geometry.size.width * (scale - 1)) / (2 * scale))
-    let maxOffsetY = max(0, (geometry.size.height * (scale - 1)) / (2 * scale))
-
-    offset.width = min(max(offset.width, -maxOffsetX), maxOffsetX)
-    offset.height = min(max(offset.height, -maxOffsetY), maxOffsetY)
-    lastOffset = offset
   }
 }
 
@@ -334,7 +290,6 @@ private struct FullScreenImageViewerPreview: View {
     let size = CGSize(width: 800, height: 600)
     let renderer = UIGraphicsImageRenderer(size: size)
     return renderer.image { context in
-      // Background gradient
       let colors = [UIColor.systemBlue.cgColor, UIColor.systemPurple.cgColor]
       let gradient = CGGradient(
         colorsSpace: CGColorSpaceCreateDeviceRGB(),
@@ -348,7 +303,6 @@ private struct FullScreenImageViewerPreview: View {
         options: []
       )
 
-      // Draw some shapes
       UIColor.white.withAlphaComponent(0.3).setFill()
       context.cgContext.fillEllipse(in: CGRect(x: 100, y: 100, width: 200, height: 200))
       context.cgContext.fillEllipse(in: CGRect(x: 500, y: 300, width: 150, height: 150))
