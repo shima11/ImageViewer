@@ -403,78 +403,238 @@ extension ImageGalleryViewer where Overlay == EmptyView {
 
 // MARK: - Preview
 
-#Preview("Gallery") {
-  ImageGalleryViewerPreview()
+#Preview("Gallery Grid") {
+  GalleryGridPreview()
+}
+
+#Preview("Gallery with Captions") {
+  GalleryWithCaptionsPreview()
+}
+
+#Preview("Text Page Indicator") {
+  TextPageIndicatorPreview()
 }
 
 #Preview("Empty Gallery") {
   EmptyGalleryPreview()
 }
 
-private struct ImageGalleryViewerPreview: View {
-  @State private var isPresented = true
+private struct GalleryGridPreview: View {
+  @State private var isPresented = false
+  @State private var selectedIndex = 0
+  @State private var sourceFrames: [CGRect] = Array(repeating: .zero, count: 6)
+
+  private let images = GalleryPreviewData.sampleImages
+  private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
 
   var body: some View {
-    ImageGalleryViewer(
-      images: Self.sampleImages,
-      initialIndex: 1,
-      sourceFrames: nil,
-      isPresented: $isPresented,
-      configuration: .default
-    )
+    NavigationStack {
+      ScrollView {
+        Text("Tap any image to open gallery")
+          .foregroundStyle(.secondary)
+          .padding()
+
+        LazyVGrid(columns: columns, spacing: 8) {
+          ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+            Image(uiImage: image)
+              .resizable()
+              .aspectRatio(contentMode: .fill)
+              .frame(height: 120)
+              .clipped()
+              .clipShape(RoundedRectangle(cornerRadius: 8))
+              .readFrame { frame in
+                if index < sourceFrames.count {
+                  sourceFrames[index] = frame
+                }
+              }
+              .onTapGesture {
+                selectedIndex = index
+                isPresented = true
+              }
+          }
+        }
+        .padding(.horizontal)
+      }
+      .navigationTitle("Photo Gallery")
+      .imageGalleryViewer(
+        isPresented: $isPresented,
+        images: images,
+        initialIndex: selectedIndex,
+        sourceFrames: sourceFrames
+      )
+    }
   }
+}
 
-  private static var sampleImages: [UIImage] {
-    let colors: [(UIColor, UIColor)] = [
-      (.systemBlue, .systemPurple),
-      (.systemOrange, .systemRed),
-      (.systemGreen, .systemTeal),
-    ]
+private struct GalleryWithCaptionsPreview: View {
+  @State private var isPresented = false
+  @State private var selectedIndex = 0
+  @State private var sourceFrames: [CGRect] = Array(repeating: .zero, count: 4)
 
-    return colors.enumerated().map { index, colorPair in
-      let size = CGSize(width: 800, height: 600)
-      let renderer = UIGraphicsImageRenderer(size: size)
-      return renderer.image { context in
-        let gradient = CGGradient(
-          colorsSpace: CGColorSpaceCreateDeviceRGB(),
-          colors: [colorPair.0.cgColor, colorPair.1.cgColor] as CFArray,
-          locations: [0, 1]
-        )!
-        context.cgContext.drawLinearGradient(
-          gradient,
-          start: .zero,
-          end: CGPoint(x: size.width, y: size.height),
-          options: []
-        )
+  private let images = GalleryPreviewData.landscapeImages
+  private let captions = [
+    "Mountain Sunrise",
+    "Ocean Waves",
+    "Forest Path",
+    "Desert Dunes",
+  ]
 
-        let text = "\(index + 1)" as NSString
-        let attributes: [NSAttributedString.Key: Any] = [
-          .font: UIFont.systemFont(ofSize: 200, weight: .bold),
-          .foregroundColor: UIColor.white.withAlphaComponent(0.5),
-        ]
-        let textSize = text.size(withAttributes: attributes)
-        let textRect = CGRect(
-          x: (size.width - textSize.width) / 2,
-          y: (size.height - textSize.height) / 2,
-          width: textSize.width,
-          height: textSize.height
-        )
-        text.draw(in: textRect, withAttributes: attributes)
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(spacing: 16) {
+          Text("Gallery with caption overlay")
+            .foregroundStyle(.secondary)
+
+          ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+            VStack(alignment: .leading, spacing: 4) {
+              Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: 180)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .readFrame { frame in
+                  if index < sourceFrames.count {
+                    sourceFrames[index] = frame
+                  }
+                }
+                .onTapGesture {
+                  selectedIndex = index
+                  isPresented = true
+                }
+
+              Text(captions[index])
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+          }
+        }
+        .padding()
+      }
+      .navigationTitle("With Captions")
+      .imageGalleryViewer(
+        isPresented: $isPresented,
+        images: images,
+        initialIndex: selectedIndex,
+        sourceFrames: sourceFrames
+      ) { currentIndex in
+        VStack {
+          Spacer()
+          Text(captions[currentIndex])
+            .font(.title3.bold())
+            .foregroundStyle(.white)
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(
+              LinearGradient(
+                colors: [.clear, .black.opacity(0.7)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+        }
       }
     }
   }
 }
 
-private struct EmptyGalleryPreview: View {
-  @State private var isPresented = true
+private struct TextPageIndicatorPreview: View {
+  @State private var isPresented = false
+  @State private var selectedIndex = 0
+
+  private let images = GalleryPreviewData.sampleImages
 
   var body: some View {
-    ImageGalleryViewer(
-      images: [],
-      initialIndex: 0,
-      sourceFrames: nil,
-      isPresented: $isPresented,
-      configuration: .default
-    )
+    NavigationStack {
+      VStack {
+        Text("Text style page indicator")
+          .foregroundStyle(.secondary)
+          .padding()
+
+        Button("Open Gallery") {
+          isPresented = true
+        }
+        .buttonStyle(.borderedProminent)
+
+        Spacer()
+      }
+      .navigationTitle("Text Indicator")
+      .imageGalleryViewer(
+        isPresented: $isPresented,
+        images: images,
+        initialIndex: selectedIndex,
+        configuration: ImageViewerConfiguration(
+          pageIndicator: PageIndicatorConfiguration(style: .text)
+        )
+      )
+    }
   }
+}
+
+private struct EmptyGalleryPreview: View {
+  @State private var isPresented = false
+
+  var body: some View {
+    NavigationStack {
+      VStack {
+        Text("Empty gallery handling")
+          .foregroundStyle(.secondary)
+          .padding()
+
+        Button("Open Empty Gallery") {
+          isPresented = true
+        }
+        .buttonStyle(.borderedProminent)
+
+        Spacer()
+      }
+      .navigationTitle("Empty Gallery")
+      .imageGalleryViewer(
+        isPresented: $isPresented,
+        images: [],
+        initialIndex: 0
+      )
+    }
+  }
+}
+
+// MARK: - Preview Data
+
+private enum GalleryPreviewData {
+  static let sampleImages: [UIImage] = {
+    let colorPairs: [(UIColor, UIColor)] = [
+      (.systemBlue, .systemPurple),
+      (.systemOrange, .systemRed),
+      (.systemGreen, .systemTeal),
+      (.systemPink, .systemIndigo),
+      (.systemYellow, .systemOrange),
+      (.systemCyan, .systemBlue),
+    ]
+
+    return colorPairs.enumerated().map { index, colors in
+      PreviewImageGenerator.gradient(
+        colors: colors,
+        size: CGSize(width: 800, height: 600),
+        text: "\(index + 1)"
+      )
+    }
+  }()
+
+  static let landscapeImages: [UIImage] = {
+    let colorPairs: [(UIColor, UIColor)] = [
+      (.systemOrange, .systemYellow),
+      (.systemBlue, .systemCyan),
+      (.systemGreen, .systemMint),
+      (.systemBrown, .systemOrange),
+    ]
+
+    return colorPairs.map { colors in
+      PreviewImageGenerator.gradient(
+        colors: colors,
+        size: CGSize(width: 1200, height: 800),
+        text: nil
+      )
+    }
+  }()
 }

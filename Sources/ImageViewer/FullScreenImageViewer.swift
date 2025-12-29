@@ -270,30 +270,122 @@ enum ImageLoadingError: Error, LocalizedError {
 
 // MARK: - Preview
 
-#Preview {
-  FullScreenImageViewerPreview()
+#Preview("Single Image") {
+  SingleImagePreview()
 }
 
-private struct FullScreenImageViewerPreview: View {
-  @State private var isPresented = true
+#Preview("With Overlay") {
+  SingleImageWithOverlayPreview()
+}
+
+private struct SingleImagePreview: View {
+  @State private var isPresented = false
+  @State private var sourceFrame: CGRect = .zero
+
+  private let sampleImage = PreviewImageGenerator.gradient(
+    colors: (.systemBlue, .systemPurple),
+    size: CGSize(width: 800, height: 600)
+  )
 
   var body: some View {
-    FullScreenImageViewer(
-      image: Self.sampleImage,
-      sourceFrame: CGRect(x: 100, y: 300, width: 200, height: 200),
-      isPresented: $isPresented,
-      configuration: .default
-    )
-  }
+    NavigationStack {
+      VStack {
+        Text("Tap the image to open viewer")
+          .foregroundStyle(.secondary)
+          .padding()
 
-  private static var sampleImage: UIImage {
-    let size = CGSize(width: 800, height: 600)
+        Image(uiImage: sampleImage)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 200, height: 150)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+          .shadow(radius: 4)
+          .readFrame { frame in
+            sourceFrame = frame
+          }
+          .onTapGesture {
+            isPresented = true
+          }
+
+        Spacer()
+      }
+      .navigationTitle("ImageViewer")
+      .imageViewer(
+        isPresented: $isPresented,
+        image: sampleImage,
+        sourceFrame: sourceFrame
+      )
+    }
+  }
+}
+
+private struct SingleImageWithOverlayPreview: View {
+  @State private var isPresented = false
+  @State private var sourceFrame: CGRect = .zero
+
+  private let sampleImage = PreviewImageGenerator.gradient(
+    colors: (.systemOrange, .systemRed),
+    size: CGSize(width: 800, height: 1200)
+  )
+
+  var body: some View {
+    NavigationStack {
+      VStack {
+        Text("Image with caption overlay")
+          .foregroundStyle(.secondary)
+          .padding()
+
+        Image(uiImage: sampleImage)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 150, height: 225)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+          .shadow(radius: 4)
+          .readFrame { frame in
+            sourceFrame = frame
+          }
+          .onTapGesture {
+            isPresented = true
+          }
+
+        Spacer()
+      }
+      .navigationTitle("With Overlay")
+      .imageViewer(
+        isPresented: $isPresented,
+        source: .image(sampleImage),
+        sourceFrame: sourceFrame,
+        configuration: ImageViewerConfiguration(
+          closeButton: .init(position: .topLeading)
+        )
+      ) {
+        VStack {
+          Spacer()
+          Text("Beautiful Sunset")
+            .font(.headline)
+            .foregroundStyle(.white)
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(.black.opacity(0.5))
+        }
+      }
+    }
+  }
+}
+
+// MARK: - Preview Image Generator
+
+enum PreviewImageGenerator {
+  static func gradient(
+    colors: (UIColor, UIColor),
+    size: CGSize,
+    text: String? = nil
+  ) -> UIImage {
     let renderer = UIGraphicsImageRenderer(size: size)
     return renderer.image { context in
-      let colors = [UIColor.systemBlue.cgColor, UIColor.systemPurple.cgColor]
       let gradient = CGGradient(
         colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: colors as CFArray,
+        colors: [colors.0.cgColor, colors.1.cgColor] as CFArray,
         locations: [0, 1]
       )!
       context.cgContext.drawLinearGradient(
@@ -303,9 +395,21 @@ private struct FullScreenImageViewerPreview: View {
         options: []
       )
 
-      UIColor.white.withAlphaComponent(0.3).setFill()
-      context.cgContext.fillEllipse(in: CGRect(x: 100, y: 100, width: 200, height: 200))
-      context.cgContext.fillEllipse(in: CGRect(x: 500, y: 300, width: 150, height: 150))
+      if let text {
+        let nsText = text as NSString
+        let attributes: [NSAttributedString.Key: Any] = [
+          .font: UIFont.systemFont(ofSize: min(size.width, size.height) * 0.3, weight: .bold),
+          .foregroundColor: UIColor.white.withAlphaComponent(0.5),
+        ]
+        let textSize = nsText.size(withAttributes: attributes)
+        let textRect = CGRect(
+          x: (size.width - textSize.width) / 2,
+          y: (size.height - textSize.height) / 2,
+          width: textSize.width,
+          height: textSize.height
+        )
+        nsText.draw(in: textRect, withAttributes: attributes)
+      }
     }
   }
 }
