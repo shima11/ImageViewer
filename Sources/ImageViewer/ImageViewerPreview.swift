@@ -24,6 +24,10 @@ import SwiftUI
   TextPageIndicatorPreview()
 }
 
+#Preview("Custom UI") {
+  CustomUIPreview()
+}
+
 #Preview("Empty Gallery") {
   EmptyGalleryPreview()
 }
@@ -108,11 +112,8 @@ private struct SingleImageWithOverlayPreview: View {
       .imageViewer(
         isPresented: $isPresented,
         source: .image(sampleImage),
-        sourceFrame: sourceFrame,
-        configuration: ImageViewerConfiguration(
-          closeButton: .init(position: .topLeading)
-        )
-      ) {
+        sourceFrame: sourceFrame
+      ) { context in
         VStack {
           Spacer()
           Text("Beautiful Sunset")
@@ -230,10 +231,10 @@ private struct GalleryWithCaptionsPreview: View {
         images: images,
         initialIndex: selectedIndex,
         sourceFrames: sourceFrames
-      ) { currentIndex in
+      ) { context in
         VStack {
           Spacer()
-          Text(captions[currentIndex])
+          Text(captions[context.currentIndex])
             .font(.title3.bold())
             .foregroundStyle(.white)
             .padding()
@@ -274,11 +275,144 @@ private struct TextPageIndicatorPreview: View {
       .navigationTitle("Text Indicator")
       .imageViewer(
         isPresented: $isPresented,
-        images: images,
+        sources: images.map { .image($0) },
         initialIndex: selectedIndex,
-        configuration: ImageViewerConfiguration(
-          pageIndicator: PageIndicatorConfiguration(style: .text)
-        )
+        overlay: { _ in EmptyView() },
+        closeButton: { DefaultCloseButton(dismiss: $0) },
+        pageIndicator: { currentIndex, totalCount in
+          // Custom text-style page indicator
+          Text("\(currentIndex + 1) / \(totalCount)")
+            .font(.subheadline.monospacedDigit())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.5), in: Capsule())
+        },
+        emptyContent: { DefaultEmptyView(dismiss: $0) },
+        loadingContent: { DefaultLoadingView() },
+        errorContent: { DefaultErrorView(error: $0) }
+      )
+    }
+  }
+}
+
+private struct CustomUIPreview: View {
+  @State private var isPresented = false
+  @State private var selectedIndex = 0
+
+  private let images = PreviewImageGenerator.sampleImages
+
+  var body: some View {
+    NavigationStack {
+      VStack {
+        Text("Fully customized UI")
+          .foregroundStyle(.secondary)
+          .padding()
+
+        Button("Open Gallery") {
+          isPresented = true
+        }
+        .buttonStyle(.borderedProminent)
+
+        Spacer()
+      }
+      .navigationTitle("Custom UI")
+      .imageViewer(
+        isPresented: $isPresented,
+        sources: images.map { .image($0) },
+        initialIndex: selectedIndex,
+        overlay: { context in
+          // Custom overlay with share button
+          VStack {
+            HStack {
+              Spacer()
+              Button {
+                // Share action
+              } label: {
+                Image(systemName: "square.and.arrow.up")
+                  .font(.title2)
+                  .foregroundStyle(.white)
+                  .frame(width: 44, height: 44)
+              }
+              .padding(.trailing, 60)
+              .padding(.top, 50)
+            }
+            Spacer()
+          }
+        },
+        closeButton: { dismiss in
+          // Custom close button
+          Button(action: dismiss) {
+            Text("Done")
+              .fontWeight(.semibold)
+              .foregroundStyle(.white)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 8)
+              .background(.ultraThinMaterial, in: Capsule())
+          }
+        },
+        pageIndicator: { currentIndex, totalCount in
+          // Custom numbered indicator
+          HStack(spacing: 4) {
+            ForEach(0..<totalCount, id: \.self) { index in
+              if index == currentIndex {
+                Text("\(index + 1)")
+                  .font(.caption.bold())
+                  .foregroundStyle(.black)
+                  .frame(width: 20, height: 20)
+                  .background(.white, in: Circle())
+              } else {
+                Circle()
+                  .fill(.white.opacity(0.5))
+                  .frame(width: 8, height: 8)
+              }
+            }
+          }
+        },
+        emptyContent: { dismiss in
+          // Custom empty state
+          VStack(spacing: 20) {
+            Image(systemName: "photo.stack")
+              .font(.system(size: 60))
+              .foregroundStyle(.white.opacity(0.4))
+
+            Text("No Photos")
+              .font(.title2.bold())
+              .foregroundStyle(.white)
+
+            Button("Close", action: dismiss)
+              .buttonStyle(.bordered)
+              .tint(.white)
+          }
+        },
+        loadingContent: {
+          // Custom loading indicator
+          VStack(spacing: 12) {
+            ProgressView()
+              .scaleEffect(1.5)
+              .tint(.white)
+            Text("Loading...")
+              .foregroundStyle(.white.opacity(0.8))
+          }
+        },
+        errorContent: { error in
+          // Custom error view
+          VStack(spacing: 16) {
+            Image(systemName: "wifi.exclamationmark")
+              .font(.system(size: 50))
+              .foregroundStyle(.red.opacity(0.8))
+
+            Text("Failed to Load")
+              .font(.headline)
+              .foregroundStyle(.white)
+
+            Text(error.localizedDescription)
+              .font(.caption)
+              .foregroundStyle(.white.opacity(0.6))
+              .multilineTextAlignment(.center)
+          }
+          .padding()
+        }
       )
     }
   }

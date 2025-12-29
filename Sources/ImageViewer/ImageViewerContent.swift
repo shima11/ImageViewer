@@ -3,13 +3,25 @@ import SwiftUI
 // MARK: - Image Viewer Content
 
 /// The main image viewer component supporting single and multiple images.
-struct ImageViewerContent<Overlay: View>: View {
+struct ImageViewerContent<
+  Overlay: View,
+  CloseButton: View,
+  PageIndicator: View,
+  EmptyContent: View,
+  LoadingContent: View,
+  ErrorContent: View
+>: View {
   let imageSources: [ImageSource]
   let initialIndex: Int
   let sourceFrames: [CGRect]?
   @Binding var isPresented: Bool
   let configuration: ImageViewerConfiguration
-  let overlay: (Int) -> Overlay
+  @ViewBuilder var overlay: (ImageViewerContext) -> Overlay
+  @ViewBuilder var closeButton: (_ dismiss: @escaping () -> Void) -> CloseButton
+  @ViewBuilder var pageIndicator: (_ currentIndex: Int, _ totalCount: Int) -> PageIndicator
+  @ViewBuilder var emptyContent: (_ dismiss: @escaping () -> Void) -> EmptyContent
+  @ViewBuilder var loadingContent: () -> LoadingContent
+  @ViewBuilder var errorContent: (Error) -> ErrorContent
 
   // MARK: - State
 
@@ -25,7 +37,12 @@ struct ImageViewerContent<Overlay: View>: View {
     sourceFrames: [CGRect]?,
     isPresented: Binding<Bool>,
     configuration: ImageViewerConfiguration,
-    @ViewBuilder overlay: @escaping (Int) -> Overlay
+    @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay,
+    @ViewBuilder closeButton: @escaping (_ dismiss: @escaping () -> Void) -> CloseButton,
+    @ViewBuilder pageIndicator: @escaping (_ currentIndex: Int, _ totalCount: Int) -> PageIndicator,
+    @ViewBuilder emptyContent: @escaping (_ dismiss: @escaping () -> Void) -> EmptyContent,
+    @ViewBuilder loadingContent: @escaping () -> LoadingContent,
+    @ViewBuilder errorContent: @escaping (Error) -> ErrorContent
   ) {
     self.imageSources = imageSources
     let validIndex = max(0, min(initialIndex, max(0, imageSources.count - 1)))
@@ -34,6 +51,11 @@ struct ImageViewerContent<Overlay: View>: View {
     self._isPresented = isPresented
     self.configuration = configuration
     self.overlay = overlay
+    self.closeButton = closeButton
+    self.pageIndicator = pageIndicator
+    self.emptyContent = emptyContent
+    self.loadingContent = loadingContent
+    self.errorContent = errorContent
     self._currentIndex = State(initialValue: validIndex)
   }
 
@@ -56,6 +78,14 @@ struct ImageViewerContent<Overlay: View>: View {
     case .interactive:
       return 0.6
     }
+  }
+
+  private var context: ImageViewerContext {
+    ImageViewerContext(
+      currentIndex: currentIndex,
+      totalCount: imageSources.count,
+      dismiss: dismiss
+    )
   }
 
   // MARK: - Body
@@ -87,22 +117,8 @@ struct ImageViewerContent<Overlay: View>: View {
       configuration.backgroundColor
         .ignoresSafeArea()
 
-      VStack(spacing: 16) {
-        Image(systemName: "photo.on.rectangle.angled")
-          .font(.largeTitle)
-          .foregroundStyle(.white.opacity(0.6))
-
-        Text("No images")
-          .foregroundStyle(.white.opacity(0.8))
-      }
+      emptyContent(dismiss)
     }
-    .onTapGesture {
-      isPresented = false
-      configuration.onDismiss?()
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(Text("No images available"))
-    .accessibilityHint(Text("Tap to close"))
   }
 
   // MARK: - Viewer Content
@@ -125,17 +141,29 @@ struct ImageViewerContent<Overlay: View>: View {
       }
 
       // Overlay
-      overlay(currentIndex)
+      overlay(context)
         .opacity(showsControls ? 1 : 0)
+
+      // Close button
+      VStack {
+        HStack {
+          closeButton(dismiss)
+            .padding(8)
+            .padding(.top, SafeAreaHelper.topInset)
+          Spacer()
+        }
+        Spacer()
+      }
+      .opacity(showsControls ? 1 : 0)
 
       // Page indicator (only for multiple images)
       if !isSingleImage && imageSources.count > 1 {
-        pageIndicator
-      }
-    }
-    .overlay(alignment: closeButtonAlignment) {
-      if configuration.closeButton.isVisible {
-        closeButton
+        VStack {
+          Spacer()
+          pageIndicator(currentIndex, imageSources.count)
+            .padding(.bottom, 50)
+        }
+        .opacity(showsControls ? 1 : 0)
       }
     }
   }
@@ -150,6 +178,8 @@ struct ImageViewerContent<Overlay: View>: View {
       isCurrentPage: true,
       transitionState: $transitionState,
       hasAppeared: $hasAppeared,
+      loadingContent: loadingContent,
+      errorContent: errorContent,
       onDismiss: dismiss
     )
   }
@@ -166,6 +196,8 @@ struct ImageViewerContent<Overlay: View>: View {
           isCurrentPage: index == currentIndex,
           transitionState: $transitionState,
           hasAppeared: $hasAppeared,
+          loadingContent: loadingContent,
+          errorContent: errorContent,
           onDismiss: dismiss
         )
         .tag(index)
@@ -175,87 +207,6 @@ struct ImageViewerContent<Overlay: View>: View {
     .accessibilityElement(children: .contain)
     .accessibilityLabel(Text("Image gallery"))
     .accessibilityValue(Text("Page \(currentIndex + 1) of \(imageSources.count)"))
-  }
-
-  // MARK: - Close Button
-
-  private var closeButtonAlignment: Alignment {
-    switch configuration.closeButton.position {
-    case .topLeading:
-      return .topLeading
-    case .topTrailing:
-      return .topTrailing
-    }
-  }
-
-  private var closeButton: some View {
-    Button {
-      dismiss()
-    } label: {
-      Image(systemName: "xmark.circle.fill")
-        .font(.title)
-        .symbolRenderingMode(.palette)
-        .foregroundStyle(.white, .black.opacity(0.5))
-        .frame(width: 44, height: 44)
-    }
-    .padding(8)
-    .padding(.top, SafeAreaHelper.topInset)
-    .padding(
-      configuration.closeButton.position == .topLeading ? .leading : .trailing,
-      8
-    )
-    .opacity(showsControls ? 1.0 : 0.0)
-    .accessibilityLabel(Text("Close"))
-    .accessibilityHint(Text("Closes the image viewer"))
-  }
-
-  // MARK: - Page Indicator
-
-  @ViewBuilder
-  private var pageIndicator: some View {
-    switch configuration.pageIndicator.style {
-    case .dots:
-      dotsIndicator
-    case .text:
-      textIndicator
-    case .none:
-      EmptyView()
-    }
-  }
-
-  private var dotsIndicator: some View {
-    VStack {
-      Spacer()
-      HStack(spacing: 6) {
-        ForEach(0..<imageSources.count, id: \.self) { index in
-          Circle()
-            .fill(
-              index == currentIndex
-                ? configuration.pageIndicator.currentPageColor
-                : configuration.pageIndicator.pageColor
-            )
-            .frame(width: 6, height: 6)
-        }
-      }
-      .padding(.bottom, 50)
-    }
-    .opacity(showsControls ? 1 : 0)
-    .accessibilityHidden(true)
-  }
-
-  private var textIndicator: some View {
-    VStack {
-      Spacer()
-      Text("\(currentIndex + 1) / \(imageSources.count)")
-        .font(.subheadline.monospacedDigit())
-        .foregroundStyle(configuration.pageIndicator.currentPageColor)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.black.opacity(0.5), in: Capsule())
-        .padding(.bottom, 50)
-    }
-    .opacity(showsControls ? 1 : 0)
-    .accessibilityHidden(true)
   }
 
   // MARK: - Helpers
@@ -281,13 +232,15 @@ struct ImageViewerContent<Overlay: View>: View {
 // MARK: - Image Page View
 
 /// Individual page with image loading support.
-struct ImagePageView: View {
+struct ImagePageView<LoadingContent: View, ErrorContent: View>: View {
   let imageSource: ImageSource
   let sourceFrame: CGRect?
   let configuration: ImageViewerConfiguration
   let isCurrentPage: Bool
   @Binding var transitionState: ImageTransitionState
   @Binding var hasAppeared: Bool
+  @ViewBuilder var loadingContent: () -> LoadingContent
+  @ViewBuilder var errorContent: (Error) -> ErrorContent
   let onDismiss: () -> Void
 
   @State private var loadedImage: UIImage?
@@ -316,28 +269,14 @@ struct ImagePageView: View {
           onDismiss: onDismiss
         )
       } else if isLoading {
-        ProgressView()
-          .tint(.white)
-      } else if loadError != nil {
-        errorView
+        loadingContent()
+      } else if let error = loadError {
+        errorContent(error)
       }
     }
     .task {
       await loadImageIfNeeded()
     }
-  }
-
-  private var errorView: some View {
-    VStack(spacing: 16) {
-      Image(systemName: "exclamationmark.triangle")
-        .font(.largeTitle)
-        .foregroundStyle(.white.opacity(0.6))
-
-      Text("Failed to load image")
-        .foregroundStyle(.white.opacity(0.8))
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(Text("Failed to load image"))
   }
 
   private func loadImageIfNeeded() async {
@@ -405,26 +344,5 @@ enum ImageLoadingError: Error, LocalizedError {
     case .invalidData:
       return "The image data is invalid or corrupted."
     }
-  }
-}
-
-// MARK: - Convenience Init
-
-extension ImageViewerContent where Overlay == EmptyView {
-  init(
-    imageSources: [ImageSource],
-    initialIndex: Int = 0,
-    sourceFrames: [CGRect]? = nil,
-    isPresented: Binding<Bool>,
-    configuration: ImageViewerConfiguration
-  ) {
-    self.init(
-      imageSources: imageSources,
-      initialIndex: initialIndex,
-      sourceFrames: sourceFrames,
-      isPresented: isPresented,
-      configuration: configuration,
-      overlay: { _ in EmptyView() }
-    )
   }
 }
