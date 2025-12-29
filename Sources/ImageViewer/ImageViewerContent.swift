@@ -14,6 +14,7 @@ struct ImageViewerContent<
   let imageSources: [ImageSource]
   let initialIndex: Int
   let sourceFrames: [CGRect]?
+  let sourceContentMode: ContentMode
   @Binding var isPresented: Bool
   let configuration: ImageViewerConfiguration
   @ViewBuilder var overlay: (ImageViewerContext) -> Overlay
@@ -35,6 +36,7 @@ struct ImageViewerContent<
     imageSources: [ImageSource],
     initialIndex: Int,
     sourceFrames: [CGRect]?,
+    sourceContentMode: ContentMode,
     isPresented: Binding<Bool>,
     configuration: ImageViewerConfiguration,
     @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay,
@@ -48,6 +50,7 @@ struct ImageViewerContent<
     let validIndex = max(0, min(initialIndex, max(0, imageSources.count - 1)))
     self.initialIndex = validIndex
     self.sourceFrames = sourceFrames
+    self.sourceContentMode = sourceContentMode
     self._isPresented = isPresented
     self.configuration = configuration
     self.overlay = overlay
@@ -174,6 +177,7 @@ struct ImageViewerContent<
     ImagePageView(
       imageSource: imageSources[0],
       sourceFrame: sourceFrames?.first,
+      sourceContentMode: sourceContentMode,
       configuration: configuration,
       isCurrentPage: true,
       transitionState: $transitionState,
@@ -192,6 +196,7 @@ struct ImageViewerContent<
         ImagePageView(
           imageSource: source,
           sourceFrame: sourceFrameForIndex(index),
+          sourceContentMode: sourceContentMode,
           configuration: configuration,
           isCurrentPage: index == currentIndex,
           transitionState: $transitionState,
@@ -235,6 +240,7 @@ struct ImageViewerContent<
 struct ImagePageView<LoadingContent: View, ErrorContent: View>: View {
   let imageSource: ImageSource
   let sourceFrame: CGRect?
+  let sourceContentMode: ContentMode
   let configuration: ImageViewerConfiguration
   let isCurrentPage: Bool
   @Binding var transitionState: ImageTransitionState
@@ -262,6 +268,7 @@ struct ImagePageView<LoadingContent: View, ErrorContent: View>: View {
         ZoomableImageView(
           image: image,
           sourceFrame: sourceFrame,
+          sourceContentMode: sourceContentMode,
           configuration: configuration,
           isCurrentPage: isCurrentPage,
           transitionState: $transitionState,

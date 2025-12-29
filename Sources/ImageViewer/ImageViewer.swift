@@ -222,6 +222,7 @@ extension View {
   ///   - sources: The array of image sources to display.
   ///   - initialIndex: The index of the image to display initially.
   ///   - sourceFrames: Optional array of source frames for zoom transitions.
+  ///   - sourceContentMode: The content mode used for source thumbnails (.fit or .fill).
   ///   - configuration: Configuration for core behavior.
   ///   - overlay: Custom overlay content.
   ///   - closeButton: Custom close button.
@@ -241,6 +242,7 @@ extension View {
     sources: [ImageSource],
     initialIndex: Int = 0,
     sourceFrames: [CGRect]? = nil,
+    sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration = .default,
     @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay,
     @ViewBuilder closeButton: @escaping (_ dismiss: @escaping () -> Void) -> CloseButton,
@@ -255,6 +257,7 @@ extension View {
         sources: sources,
         initialIndex: initialIndex,
         sourceFrames: sourceFrames,
+        sourceContentMode: sourceContentMode,
         configuration: configuration,
         overlay: overlay,
         closeButton: closeButton,
@@ -283,6 +286,7 @@ extension View {
     sources: [ImageSource],
     initialIndex: Int = 0,
     sourceFrames: [CGRect]? = nil,
+    sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration = .default
   ) -> some View {
     imageViewer(
@@ -290,6 +294,7 @@ extension View {
       sources: sources,
       initialIndex: initialIndex,
       sourceFrames: sourceFrames,
+      sourceContentMode: sourceContentMode,
       configuration: configuration,
       overlay: { _ in EmptyView() },
       closeButton: { DefaultCloseButton(dismiss: $0) },
@@ -306,6 +311,7 @@ extension View {
     sources: [ImageSource],
     initialIndex: Int = 0,
     sourceFrames: [CGRect]? = nil,
+    sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration = .default,
     @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay
   ) -> some View {
@@ -314,6 +320,7 @@ extension View {
       sources: sources,
       initialIndex: initialIndex,
       sourceFrames: sourceFrames,
+      sourceContentMode: sourceContentMode,
       configuration: configuration,
       overlay: overlay,
       closeButton: { DefaultCloseButton(dismiss: $0) },
@@ -331,6 +338,7 @@ extension View {
     isPresented: Binding<Bool>,
     image: UIImage,
     sourceFrame: CGRect? = nil,
+    sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration = .default
   ) -> some View {
     imageViewer(
@@ -338,6 +346,7 @@ extension View {
       sources: [.image(image)],
       initialIndex: 0,
       sourceFrames: sourceFrame.map { [$0] },
+      sourceContentMode: sourceContentMode,
       configuration: configuration
     )
   }
@@ -348,6 +357,7 @@ extension View {
     images: [UIImage],
     initialIndex: Int = 0,
     sourceFrames: [CGRect]? = nil,
+    sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration = .default
   ) -> some View {
     imageViewer(
@@ -355,6 +365,7 @@ extension View {
       sources: images.map { .image($0) },
       initialIndex: initialIndex,
       sourceFrames: sourceFrames,
+      sourceContentMode: sourceContentMode,
       configuration: configuration
     )
   }
@@ -365,6 +376,7 @@ extension View {
     images: [UIImage],
     initialIndex: Int = 0,
     sourceFrames: [CGRect]? = nil,
+    sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration = .default,
     @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay
   ) -> some View {
@@ -373,6 +385,7 @@ extension View {
       sources: images.map { .image($0) },
       initialIndex: initialIndex,
       sourceFrames: sourceFrames,
+      sourceContentMode: sourceContentMode,
       configuration: configuration,
       overlay: overlay
     )
@@ -385,6 +398,7 @@ extension View {
     isPresented: Binding<Bool>,
     source: ImageSource,
     sourceFrame: CGRect? = nil,
+    sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration = .default
   ) -> some View {
     imageViewer(
@@ -392,6 +406,7 @@ extension View {
       sources: [source],
       initialIndex: 0,
       sourceFrames: sourceFrame.map { [$0] },
+      sourceContentMode: sourceContentMode,
       configuration: configuration
     )
   }
@@ -401,6 +416,7 @@ extension View {
     isPresented: Binding<Bool>,
     source: ImageSource,
     sourceFrame: CGRect? = nil,
+    sourceContentMode: ContentMode = .fit,
     configuration: ImageViewerConfiguration = .default,
     @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay
   ) -> some View {
@@ -409,6 +425,7 @@ extension View {
       sources: [source],
       initialIndex: 0,
       sourceFrames: sourceFrame.map { [$0] },
+      sourceContentMode: sourceContentMode,
       configuration: configuration,
       overlay: overlay
     )
@@ -429,6 +446,7 @@ private struct ImageViewerModifier<
   let sources: [ImageSource]
   let initialIndex: Int
   let sourceFrames: [CGRect]?
+  let sourceContentMode: ContentMode
   let configuration: ImageViewerConfiguration
   @ViewBuilder var overlay: (ImageViewerContext) -> Overlay
   @ViewBuilder var closeButton: (_ dismiss: @escaping () -> Void) -> CloseButton
@@ -444,6 +462,7 @@ private struct ImageViewerModifier<
           imageSources: sources,
           initialIndex: initialIndex,
           sourceFrames: sourceFrames,
+          sourceContentMode: sourceContentMode,
           isPresented: $isPresented,
           configuration: configuration,
           overlay: overlay,
