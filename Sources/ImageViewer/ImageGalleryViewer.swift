@@ -442,6 +442,7 @@ private struct GalleryGridPreview: View {
               .frame(height: 120)
               .clipped()
               .clipShape(RoundedRectangle(cornerRadius: 8))
+              .opacity(isPresented && selectedIndex == index ? 0 : 1)
               .readFrame { frame in
                 if index < sourceFrames.count {
                   sourceFrames[index] = frame
@@ -494,6 +495,7 @@ private struct GalleryWithCaptionsPreview: View {
                 .frame(height: 180)
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .opacity(isPresented && selectedIndex == index ? 0 : 1)
                 .readFrame { frame in
                   if index < sourceFrames.count {
                     sourceFrames[index] = frame

@@ -300,6 +300,7 @@ private struct SingleImagePreview: View {
           .frame(width: 200, height: 150)
           .clipShape(RoundedRectangle(cornerRadius: 12))
           .shadow(radius: 4)
+          .opacity(isPresented ? 0 : 1)
           .readFrame { frame in
             sourceFrame = frame
           }
@@ -341,6 +342,7 @@ private struct SingleImageWithOverlayPreview: View {
           .frame(width: 150, height: 225)
           .clipShape(RoundedRectangle(cornerRadius: 12))
           .shadow(radius: 4)
+          .opacity(isPresented ? 0 : 1)
           .readFrame { frame in
             sourceFrame = frame
           }
