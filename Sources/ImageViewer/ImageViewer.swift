@@ -5,12 +5,84 @@ import UIKit
 
 extension View {
 
-  // MARK: - Single Image Viewer
+  // MARK: - Unified Image Viewer
 
-  /// Presents a full-screen image viewer with zoom transition from the source frame.
+  /// Presents a full-screen image viewer with optional swipe navigation for multiple images.
   ///
-  /// The viewer is displayed in a separate UIWindow, ensuring it appears above
-  /// all other content including sheets and modals.
+  /// This is the primary API for displaying images. It supports both single and multiple images,
+  /// with zoom, pan, and interactive dismiss gestures.
+  ///
+  /// - Parameters:
+  ///   - isPresented: A binding to whether the image viewer is presented.
+  ///   - sources: The array of image sources to display.
+  ///   - initialIndex: The index of the image to display initially. Defaults to 0.
+  ///   - sourceFrames: Optional array of source frames for zoom transitions.
+  ///   - configuration: Optional configuration for customizing the viewer behavior.
+  ///   - overlay: Optional overlay content. Receives current page index.
+  ///
+  /// - Returns: A view that presents the image viewer when `isPresented` is true.
+  ///
+  /// Example (Multiple Images):
+  /// ```swift
+  /// .imageViewer(
+  ///     isPresented: $showViewer,
+  ///     sources: images.map { .image($0) },
+  ///     initialIndex: selectedIndex,
+  ///     sourceFrames: frames
+  /// ) { currentIndex in
+  ///     Text(captions[currentIndex])
+  /// }
+  /// ```
+  public func imageViewer<Overlay: View>(
+    isPresented: Binding<Bool>,
+    sources: [ImageSource],
+    initialIndex: Int = 0,
+    sourceFrames: [CGRect]? = nil,
+    configuration: ImageViewerConfiguration = .default,
+    @ViewBuilder overlay: @escaping (Int) -> Overlay
+  ) -> some View {
+    modifier(
+      ImageViewerModifier(
+        isPresented: isPresented,
+        sources: sources,
+        initialIndex: initialIndex,
+        sourceFrames: sourceFrames,
+        configuration: configuration,
+        overlay: overlay
+      )
+    )
+  }
+
+  /// Presents a full-screen image viewer with optional swipe navigation for multiple images.
+  ///
+  /// - Parameters:
+  ///   - isPresented: A binding to whether the image viewer is presented.
+  ///   - sources: The array of image sources to display.
+  ///   - initialIndex: The index of the image to display initially. Defaults to 0.
+  ///   - sourceFrames: Optional array of source frames for zoom transitions.
+  ///   - configuration: Optional configuration for customizing the viewer behavior.
+  ///
+  /// - Returns: A view that presents the image viewer when `isPresented` is true.
+  public func imageViewer(
+    isPresented: Binding<Bool>,
+    sources: [ImageSource],
+    initialIndex: Int = 0,
+    sourceFrames: [CGRect]? = nil,
+    configuration: ImageViewerConfiguration = .default
+  ) -> some View {
+    imageViewer(
+      isPresented: isPresented,
+      sources: sources,
+      initialIndex: initialIndex,
+      sourceFrames: sourceFrames,
+      configuration: configuration,
+      overlay: { _ in EmptyView() }
+    )
+  }
+
+  // MARK: - Single Image Convenience
+
+  /// Presents a full-screen image viewer for a single image.
   ///
   /// - Parameters:
   ///   - isPresented: A binding to whether the image viewer is presented.
@@ -23,25 +95,21 @@ extension View {
   public func imageViewer<Overlay: View>(
     isPresented: Binding<Bool>,
     source: ImageSource,
-    sourceFrame: CGRect?,
+    sourceFrame: CGRect? = nil,
     configuration: ImageViewerConfiguration = .default,
     @ViewBuilder overlay: @escaping () -> Overlay
   ) -> some View {
-    modifier(
-      ImageViewerModifier(
-        isPresented: isPresented,
-        source: source,
-        sourceFrame: sourceFrame,
-        configuration: configuration,
-        overlay: overlay
-      )
+    imageViewer(
+      isPresented: isPresented,
+      sources: [source],
+      initialIndex: 0,
+      sourceFrames: sourceFrame.map { [$0] },
+      configuration: configuration,
+      overlay: { _ in overlay() }
     )
   }
 
-  /// Presents a full-screen image viewer with zoom transition from the source frame.
-  ///
-  /// The viewer is displayed in a separate UIWindow, ensuring it appears above
-  /// all other content including sheets and modals.
+  /// Presents a full-screen image viewer for a single image.
   ///
   /// - Parameters:
   ///   - isPresented: A binding to whether the image viewer is presented.
@@ -53,29 +121,21 @@ extension View {
   public func imageViewer(
     isPresented: Binding<Bool>,
     source: ImageSource,
-    sourceFrame: CGRect?,
+    sourceFrame: CGRect? = nil,
     configuration: ImageViewerConfiguration = .default
   ) -> some View {
-    modifier(
-      ImageViewerModifier(
-        isPresented: isPresented,
-        source: source,
-        sourceFrame: sourceFrame,
-        configuration: configuration,
-        overlay: { EmptyView() }
-      )
+    imageViewer(
+      isPresented: isPresented,
+      sources: [source],
+      initialIndex: 0,
+      sourceFrames: sourceFrame.map { [$0] },
+      configuration: configuration
     )
   }
 
-  /// Presents a full-screen image viewer with zoom transition from the source frame.
-  ///
-  /// - Parameters:
-  ///   - isPresented: A binding to whether the image viewer is presented.
-  ///   - image: The UIImage to display.
-  ///   - sourceFrame: The frame of the source image in global coordinates.
-  ///   - configuration: Optional configuration for customizing the viewer behavior.
-  ///
-  /// - Returns: A view that presents the image viewer when `isPresented` is true.
+  // MARK: - UIImage Convenience
+
+  /// Presents a full-screen image viewer for a single UIImage.
   ///
   /// Example:
   /// ```swift
@@ -83,12 +143,8 @@ extension View {
   /// @State private var sourceFrame: CGRect = .zero
   ///
   /// Image(uiImage: image)
-  ///     .readFrame { frame in
-  ///         sourceFrame = frame
-  ///     }
-  ///     .onTapGesture {
-  ///         showViewer = true
-  ///     }
+  ///     .readFrame { sourceFrame = $0 }
+  ///     .onTapGesture { showViewer = true }
   ///     .imageViewer(
   ///         isPresented: $showViewer,
   ///         image: image,
@@ -98,7 +154,7 @@ extension View {
   public func imageViewer(
     isPresented: Binding<Bool>,
     image: UIImage,
-    sourceFrame: CGRect?,
+    sourceFrame: CGRect? = nil,
     configuration: ImageViewerConfiguration = .default
   ) -> some View {
     imageViewer(
@@ -109,112 +165,36 @@ extension View {
     )
   }
 
-  // MARK: - Gallery Viewer
-
-  /// Presents a full-screen image gallery viewer with swipe navigation.
-  ///
-  /// - Parameters:
-  ///   - isPresented: A binding to whether the gallery viewer is presented.
-  ///   - sources: The array of image sources to display.
-  ///   - initialIndex: The index of the image to display initially. Defaults to 0.
-  ///   - sourceFrames: Optional array of source frames for zoom transitions.
-  ///   - configuration: Optional configuration for customizing the viewer behavior.
-  ///   - overlay: Optional overlay content. Receives current page index.
-  ///
-  /// - Returns: A view that presents the image gallery when `isPresented` is true.
-  public func imageGalleryViewer<Overlay: View>(
-    isPresented: Binding<Bool>,
-    sources: [ImageSource],
-    initialIndex: Int = 0,
-    sourceFrames: [CGRect]? = nil,
-    configuration: ImageViewerConfiguration = .default,
-    @ViewBuilder overlay: @escaping (Int) -> Overlay
-  ) -> some View {
-    modifier(
-      ImageGalleryViewerModifier(
-        isPresented: isPresented,
-        sources: sources,
-        initialIndex: initialIndex,
-        sourceFrames: sourceFrames,
-        configuration: configuration,
-        overlay: overlay
-      )
-    )
-  }
-
-  /// Presents a full-screen image gallery viewer with swipe navigation.
-  ///
-  /// - Parameters:
-  ///   - isPresented: A binding to whether the gallery viewer is presented.
-  ///   - sources: The array of image sources to display.
-  ///   - initialIndex: The index of the image to display initially. Defaults to 0.
-  ///   - sourceFrames: Optional array of source frames for zoom transitions.
-  ///   - configuration: Optional configuration for customizing the viewer behavior.
-  ///
-  /// - Returns: A view that presents the image gallery when `isPresented` is true.
-  public func imageGalleryViewer(
-    isPresented: Binding<Bool>,
-    sources: [ImageSource],
-    initialIndex: Int = 0,
-    sourceFrames: [CGRect]? = nil,
-    configuration: ImageViewerConfiguration = .default
-  ) -> some View {
-    modifier(
-      ImageGalleryViewerModifier(
-        isPresented: isPresented,
-        sources: sources,
-        initialIndex: initialIndex,
-        sourceFrames: sourceFrames,
-        configuration: configuration,
-        overlay: { _ in EmptyView() }
-      )
-    )
-  }
-
-  /// Presents a full-screen image gallery viewer with swipe navigation.
-  ///
-  /// - Parameters:
-  ///   - isPresented: A binding to whether the gallery viewer is presented.
-  ///   - images: The array of UIImages to display.
-  ///   - initialIndex: The index of the image to display initially. Defaults to 0.
-  ///   - sourceFrames: Optional array of source frames for zoom transitions.
-  ///   - configuration: Optional configuration for customizing the viewer behavior.
-  ///
-  /// - Returns: A view that presents the image gallery when `isPresented` is true.
+  /// Presents a full-screen image viewer for multiple UIImages.
   ///
   /// Example:
   /// ```swift
-  /// @State private var showGallery = false
+  /// @State private var showViewer = false
   /// @State private var selectedIndex = 0
-  /// @State private var sourceFrames: [CGRect] = []
   ///
   /// LazyVGrid(columns: columns) {
   ///     ForEach(Array(images.enumerated()), id: \.offset) { index, image in
   ///         Image(uiImage: image)
-  ///             .readFrame { frame in
-  ///                 sourceFrames[index] = frame
-  ///             }
   ///             .onTapGesture {
   ///                 selectedIndex = index
-  ///                 showGallery = true
+  ///                 showViewer = true
   ///             }
   ///     }
   /// }
-  /// .imageGalleryViewer(
-  ///     isPresented: $showGallery,
+  /// .imageViewer(
+  ///     isPresented: $showViewer,
   ///     images: images,
-  ///     initialIndex: selectedIndex,
-  ///     sourceFrames: sourceFrames
+  ///     initialIndex: selectedIndex
   /// )
   /// ```
-  public func imageGalleryViewer(
+  public func imageViewer(
     isPresented: Binding<Bool>,
     images: [UIImage],
     initialIndex: Int = 0,
     sourceFrames: [CGRect]? = nil,
     configuration: ImageViewerConfiguration = .default
   ) -> some View {
-    imageGalleryViewer(
+    imageViewer(
       isPresented: isPresented,
       sources: images.map { .image($0) },
       initialIndex: initialIndex,
@@ -223,22 +203,12 @@ extension View {
     )
   }
 
-  /// Presents a full-screen image gallery viewer with swipe navigation and custom overlay.
-  ///
-  /// - Parameters:
-  ///   - isPresented: A binding to whether the gallery viewer is presented.
-  ///   - images: The array of UIImages to display.
-  ///   - initialIndex: The index of the image to display initially. Defaults to 0.
-  ///   - sourceFrames: Optional array of source frames for zoom transitions.
-  ///   - configuration: Optional configuration for customizing the viewer behavior.
-  ///   - overlay: Overlay content. Receives current page index.
-  ///
-  /// - Returns: A view that presents the image gallery when `isPresented` is true.
+  /// Presents a full-screen image viewer for multiple UIImages with custom overlay.
   ///
   /// Example:
   /// ```swift
-  /// .imageGalleryViewer(
-  ///     isPresented: $showGallery,
+  /// .imageViewer(
+  ///     isPresented: $showViewer,
   ///     images: images,
   ///     initialIndex: selectedIndex
   /// ) { currentIndex in
@@ -246,11 +216,10 @@ extension View {
   ///         Spacer()
   ///         Text(captions[currentIndex])
   ///             .foregroundStyle(.white)
-  ///             .padding()
   ///     }
   /// }
   /// ```
-  public func imageGalleryViewer<Overlay: View>(
+  public func imageViewer<Overlay: View>(
     isPresented: Binding<Bool>,
     images: [UIImage],
     initialIndex: Int = 0,
@@ -258,7 +227,7 @@ extension View {
     configuration: ImageViewerConfiguration = .default,
     @ViewBuilder overlay: @escaping (Int) -> Overlay
   ) -> some View {
-    imageGalleryViewer(
+    imageViewer(
       isPresented: isPresented,
       sources: images.map { .image($0) },
       initialIndex: initialIndex,
@@ -401,7 +370,7 @@ public struct ImageViewerConfiguration: Sendable {
   /// Configuration for the close button.
   public var closeButton: CloseButtonConfiguration
 
-  /// Configuration for the page indicator (gallery only).
+  /// Configuration for the page indicator (multiple images only).
   public var pageIndicator: PageIndicatorConfiguration
 
   // MARK: - Callbacks
@@ -409,7 +378,7 @@ public struct ImageViewerConfiguration: Sendable {
   /// Called when the viewer is dismissed.
   public var onDismiss: (@Sendable () -> Void)?
 
-  /// Called when the current page changes (gallery only).
+  /// Called when the current page changes (multiple images only).
   public var onPageChange: (@Sendable (Int) -> Void)?
 
   // MARK: - Init
@@ -447,29 +416,6 @@ public struct ImageViewerConfiguration: Sendable {
 
 private struct ImageViewerModifier<Overlay: View>: ViewModifier {
   @Binding var isPresented: Bool
-  let source: ImageSource
-  let sourceFrame: CGRect?
-  let configuration: ImageViewerConfiguration
-  @ViewBuilder var overlay: () -> Overlay
-
-  func body(content: Content) -> some View {
-    content
-      .windowCover(isPresented: $isPresented, sourceFrame: sourceFrame) { frame in
-        FullScreenImageViewer(
-          imageSource: source,
-          sourceFrame: frame,
-          isPresented: $isPresented,
-          configuration: configuration,
-          overlay: overlay
-        )
-      }
-  }
-}
-
-// MARK: - Gallery View Modifier
-
-private struct ImageGalleryViewerModifier<Overlay: View>: ViewModifier {
-  @Binding var isPresented: Bool
   let sources: [ImageSource]
   let initialIndex: Int
   let sourceFrames: [CGRect]?
@@ -479,7 +425,7 @@ private struct ImageGalleryViewerModifier<Overlay: View>: ViewModifier {
   func body(content: Content) -> some View {
     content
       .windowCover(isPresented: $isPresented) {
-        ImageGalleryViewer(
+        ImageViewerContent(
           imageSources: sources,
           initialIndex: initialIndex,
           sourceFrames: sourceFrames,
