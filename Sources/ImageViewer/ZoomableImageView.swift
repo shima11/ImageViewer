@@ -69,10 +69,6 @@ struct ZoomableImageView: View {
     }
   }
 
-  var currentDismissProgress: CGFloat {
-    dismissProgress
-  }
-
   var showsControls: Bool {
     transitionState == .presented || transitionState == .interactive
   }
@@ -81,7 +77,27 @@ struct ZoomableImageView: View {
 
   var body: some View {
     GeometryReader { geometry in
-      imageView(in: geometry)
+      let finalFrame = calculateFinalFrame(in: geometry)
+      let localSourceFrame = convertToLocalFrame(sourceFrame, in: geometry)
+      let params = calculateTransitionParams(
+        finalFrame: finalFrame,
+        localSourceFrame: localSourceFrame,
+        geometrySize: geometry.size
+      )
+
+      // Single unified view structure for smooth animation
+      imageContent(params: params, finalFrame: finalFrame, in: geometry)
+        .gesture(combinedGesture(in: geometry))
+        .onTapGesture(count: 2) { location in
+          handleDoubleTap(at: location, in: geometry)
+        }
+        .accessibilityElement()
+        .accessibilityLabel(Text("Image"))
+        .accessibilityAddTraits(.isImage)
+        .accessibilityHint(Text("Double tap to zoom, drag to dismiss"))
+        .accessibilityAction(.magicTap) {
+          onDismiss()
+        }
     }
     .onChange(of: isCurrentPage) { _, newValue in
       if newValue {
@@ -93,92 +109,35 @@ struct ZoomableImageView: View {
     }
   }
 
-  // MARK: - Image View
+  // MARK: - Image Content
 
-  private func imageView(in geometry: GeometryProxy) -> some View {
-    let finalFrame = calculateFinalFrame(in: geometry)
-    let localSourceFrame = convertToLocalFrame(sourceFrame, in: geometry)
-    let transitionParams = calculateTransitionParams(
-      finalFrame: finalFrame,
-      localSourceFrame: localSourceFrame,
-      geometrySize: geometry.size
-    )
+  @ViewBuilder
+  private func imageContent(
+    params: TransitionParams,
+    finalFrame: CGRect,
+    in geometry: GeometryProxy
+  ) -> some View {
     let totalOffset = CGSize(
       width: offset.width + dragOffset.width,
       height: offset.height + dragOffset.height
     )
 
-    return ZStack {
-      if sourceContentMode == .fill && transitionParams.needsClipping {
-        // Fill mode with clipping - use container approach
-        fillModeImage(
-          transitionParams: transitionParams,
-          finalFrame: finalFrame,
-          totalOffset: totalOffset,
-          in: geometry
-        )
-      } else {
-        // Fit mode or no clipping needed
-        fitModeImage(
-          transitionParams: transitionParams,
-          totalOffset: totalOffset,
-          in: geometry
-        )
-      }
-    }
-    .gesture(combinedGesture(in: geometry))
-    .onTapGesture(count: 2) { location in
-      handleDoubleTap(at: location, in: geometry)
-    }
-    .accessibilityElement()
-    .accessibilityLabel(Text("Image"))
-    .accessibilityAddTraits(.isImage)
-    .accessibilityHint(Text("Double tap to zoom, drag to dismiss"))
-    .accessibilityAction(.magicTap) {
-      onDismiss()
-    }
-  }
-
-  private func fitModeImage(
-    transitionParams: TransitionParams,
-    totalOffset: CGSize,
-    in geometry: GeometryProxy
-  ) -> some View {
-    Image(uiImage: image)
-      .resizable()
-      .aspectRatio(contentMode: .fit)
-      .frame(width: transitionParams.containerSize.width, height: transitionParams.containerSize.height)
-      .clipShape(RoundedRectangle(cornerRadius: transitionParams.cornerRadius))
-      .scaleEffect(scale)
-      .position(
-        x: transitionParams.position.x + totalOffset.width,
-        y: transitionParams.position.y + totalOffset.height
-      )
-  }
-
-  private func fillModeImage(
-    transitionParams: TransitionParams,
-    finalFrame: CGRect,
-    totalOffset: CGSize,
-    in geometry: GeometryProxy
-  ) -> some View {
-    // Container that clips the content
-    Rectangle()
-      .fill(.clear)
-      .frame(width: transitionParams.containerSize.width, height: transitionParams.containerSize.height)
+    // Use a single view structure that animates all properties
+    Color.clear
+      .frame(width: params.containerSize.width, height: params.containerSize.height)
       .overlay {
-        // Image scaled to fill the container
         Image(uiImage: image)
           .resizable()
           .aspectRatio(contentMode: .fit)
           .frame(width: finalFrame.width, height: finalFrame.height)
-          .scaleEffect(transitionParams.imageScale)
+          .scaleEffect(params.imageScale)
       }
-      .clipShape(RoundedRectangle(cornerRadius: transitionParams.cornerRadius))
+      .clipped()
+      .clipShape(RoundedRectangle(cornerRadius: params.cornerRadius))
       .scaleEffect(scale)
       .position(
-        x: transitionParams.position.x + totalOffset.width,
-        y: transitionParams.position.y + totalOffset.height
+        x: params.position.x + totalOffset.width,
+        y: params.position.y + totalOffset.height
       )
   }
 
@@ -189,7 +148,6 @@ struct ZoomableImageView: View {
     var imageScale: CGFloat
     var position: CGPoint
     var cornerRadius: CGFloat
-    var needsClipping: Bool
   }
 
   private func calculateTransitionParams(
@@ -200,13 +158,12 @@ struct ZoomableImageView: View {
     let isTransitioning = transitionState == .appearing || transitionState == .dismissing
     let isInteractive = transitionState == .interactive
 
-    // Default (presented state)
+    // Default (presented state) - container matches final frame, no extra scaling
     var params = TransitionParams(
       containerSize: finalFrame.size,
       imageScale: 1.0,
       position: CGPoint(x: geometrySize.width / 2, y: geometrySize.height / 2),
-      cornerRadius: 0,
-      needsClipping: false
+      cornerRadius: 0
     )
 
     guard let sourceFrame = localSourceFrame else {
@@ -214,56 +171,43 @@ struct ZoomableImageView: View {
     }
 
     if isTransitioning {
-      if sourceContentMode == .fill {
-        // Fill mode: container is sourceFrame size, image is scaled to fill
-        let fillScale = calculateFillScale(imageSize: finalFrame.size, containerSize: sourceFrame.size)
-        params.containerSize = sourceFrame.size
-        params.imageScale = fillScale
-        params.position = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
-        params.needsClipping = true
-      } else {
-        // Fit mode: just resize to source frame
-        params.containerSize = sourceFrame.size
-        params.imageScale = 1.0
-        params.position = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
-        params.needsClipping = false
-      }
+      // Transition to/from source
+      params.containerSize = sourceFrame.size
+      params.position = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
       params.cornerRadius = configuration.transitionCornerRadius
+
+      if sourceContentMode == .fill {
+        // Scale image to fill the source container
+        params.imageScale = calculateFillScale(imageSize: finalFrame.size, containerSize: sourceFrame.size)
+      } else {
+        // Scale image to fit the source container
+        params.imageScale = calculateFitScale(imageSize: finalFrame.size, containerSize: sourceFrame.size)
+      }
     } else if isInteractive {
+      // Interactive dismiss - interpolate from presented to source
       let progress = dismissProgress
 
+      params.containerSize = CGSize(
+        width: finalFrame.width + (sourceFrame.width - finalFrame.width) * progress,
+        height: finalFrame.height + (sourceFrame.height - finalFrame.height) * progress
+      )
+
+      let presentedPosition = CGPoint(x: geometrySize.width / 2, y: geometrySize.height / 2)
+      let sourcePosition = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
+      params.position = CGPoint(
+        x: presentedPosition.x + (sourcePosition.x - presentedPosition.x) * progress,
+        y: presentedPosition.y + (sourcePosition.y - presentedPosition.y) * progress
+      )
+
       if sourceContentMode == .fill {
-        // Interpolate from presented to source
-        let fillScale = calculateFillScale(imageSize: finalFrame.size, containerSize: sourceFrame.size)
-
-        params.containerSize = CGSize(
-          width: finalFrame.width + (sourceFrame.width - finalFrame.width) * progress,
-          height: finalFrame.height + (sourceFrame.height - finalFrame.height) * progress
-        )
-        params.imageScale = 1.0 + (fillScale - 1.0) * progress
-
-        let presentedPosition = CGPoint(x: geometrySize.width / 2, y: geometrySize.height / 2)
-        let sourcePosition = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
-        params.position = CGPoint(
-          x: presentedPosition.x + (sourcePosition.x - presentedPosition.x) * progress,
-          y: presentedPosition.y + (sourcePosition.y - presentedPosition.y) * progress
-        )
-        params.needsClipping = true
+        let targetScale = calculateFillScale(imageSize: finalFrame.size, containerSize: sourceFrame.size)
+        params.imageScale = 1.0 + (targetScale - 1.0) * progress
       } else {
-        // Fit mode interactive
-        params.containerSize = CGSize(
-          width: finalFrame.width + (sourceFrame.width - finalFrame.width) * progress,
-          height: finalFrame.height + (sourceFrame.height - finalFrame.height) * progress
-        )
-
-        let presentedPosition = CGPoint(x: geometrySize.width / 2, y: geometrySize.height / 2)
-        let sourcePosition = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
-        params.position = CGPoint(
-          x: presentedPosition.x + (sourcePosition.x - presentedPosition.x) * progress,
-          y: presentedPosition.y + (sourcePosition.y - presentedPosition.y) * progress
-        )
-        params.needsClipping = false
+        let targetScale = calculateFitScale(imageSize: finalFrame.size, containerSize: sourceFrame.size)
+        params.imageScale = 1.0 + (targetScale - 1.0) * progress
       }
+
+      params.cornerRadius = configuration.transitionCornerRadius * progress
     }
 
     return params
@@ -274,6 +218,13 @@ struct ZoomableImageView: View {
     let scaleX = containerSize.width / imageSize.width
     let scaleY = containerSize.height / imageSize.height
     return max(scaleX, scaleY)
+  }
+
+  private func calculateFitScale(imageSize: CGSize, containerSize: CGSize) -> CGFloat {
+    guard imageSize.width > 0, imageSize.height > 0 else { return 1.0 }
+    let scaleX = containerSize.width / imageSize.width
+    let scaleY = containerSize.height / imageSize.height
+    return min(scaleX, scaleY)
   }
 
   // MARK: - Frame Calculations
