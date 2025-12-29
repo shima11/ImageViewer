@@ -32,6 +32,10 @@ import SwiftUI
   EmptyGalleryPreview()
 }
 
+#Preview("Fill Mode Transition") {
+  FillModeTransitionPreview()
+}
+
 // MARK: - Single Image Preview Views
 
 private struct SingleImagePreview: View {
@@ -442,6 +446,83 @@ private struct EmptyGalleryPreview: View {
         isPresented: $isPresented,
         images: [],
         initialIndex: 0
+      )
+    }
+  }
+}
+
+private struct FillModeTransitionPreview: View {
+  @State private var isPresented = false
+  @State private var selectedIndex = 0
+  @State private var sourceFrames: [CGRect] = Array(repeating: .zero, count: 4)
+
+  // Tall images to demonstrate fill mode cropping
+  private let images: [UIImage] = {
+    let colorPairs: [(UIColor, UIColor)] = [
+      (.systemPurple, .systemBlue),
+      (.systemRed, .systemOrange),
+      (.systemTeal, .systemGreen),
+      (.systemIndigo, .systemPink),
+    ]
+    return colorPairs.enumerated().map { index, colors in
+      PreviewImageGenerator.gradient(
+        colors: colors,
+        size: CGSize(width: 600, height: 1200),  // Tall aspect ratio (1:2)
+        text: "\(index + 1)"
+      )
+    }
+  }()
+
+  private let columns = [GridItem(.flexible()), GridItem(.flexible())]
+
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(spacing: 16) {
+          Text("Thumbnails use .fill + clip")
+            .font(.headline)
+
+          Text("The transition starts from the cropped view and expands to show the full image")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
+
+          LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+              Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 160, height: 160)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .opacity(isPresented && selectedIndex == index ? 0 : 1)
+                .readFrame { frame in
+                  if index < sourceFrames.count {
+                    sourceFrames[index] = frame
+                  }
+                }
+                .onTapGesture {
+                  selectedIndex = index
+                  isPresented = true
+                }
+            }
+          }
+          .padding(.horizontal)
+
+          Text("Image aspect: 1:2 (tall)")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical)
+      }
+      .navigationTitle("Fill Mode")
+      .imageViewer(
+        isPresented: $isPresented,
+        images: images,
+        initialIndex: selectedIndex,
+        sourceFrames: sourceFrames,
+        sourceContentMode: .fill
       )
     }
   }
