@@ -87,7 +87,7 @@ private struct WindowCoverContentView<Content: View>: View {
 // MARK: - Window Manager
 
 @MainActor
-private final class WindowCoverManager {
+final class WindowCoverManager {
   private var window: UIWindow?
 
   func show<Content: View>(content: Content) {
@@ -106,6 +106,24 @@ private final class WindowCoverManager {
     let hostingController = UIHostingController(rootView: content)
     hostingController.view.backgroundColor = .clear
     window.rootViewController = hostingController
+
+    self.window = window
+    window.makeKeyAndVisible()
+  }
+
+  func show(viewController: UIViewController) {
+    guard
+      let windowScene = UIApplication.shared.connectedScenes
+        .compactMap({ $0 as? UIWindowScene })
+        .first(where: { $0.activationState == .foregroundActive })
+    else {
+      return
+    }
+
+    let window = PassthroughWindow(windowScene: windowScene)
+    window.backgroundColor = .clear
+    window.windowLevel = .alert + 1
+    window.rootViewController = viewController
 
     self.window = window
     window.makeKeyAndVisible()

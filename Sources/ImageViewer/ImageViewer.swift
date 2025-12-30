@@ -460,23 +460,49 @@ private struct ImageViewerModifier<
   @ViewBuilder var loadingContent: () -> LoadingContent
   @ViewBuilder var errorContent: (Error) -> ErrorContent
 
+  @State private var windowManager: WindowCoverManager?
+
   func body(content: Content) -> some View {
     content
-      .windowCover(isPresented: $isPresented) {
-        ImageViewerContent(
-          imageSources: sources,
-          initialIndex: initialIndex,
-          sourceFrames: sourceFrames,
-          sourceContentMode: sourceContentMode,
-          isPresented: $isPresented,
-          configuration: configuration,
-          overlay: overlay,
-          closeButton: closeButton,
-          pageIndicator: pageIndicator,
-          emptyContent: emptyContent,
-          loadingContent: loadingContent,
-          errorContent: errorContent
-        )
+      .onChange(of: isPresented) { _, newValue in
+        if newValue {
+          showViewer()
+        } else {
+          hideViewer()
+        }
       }
+  }
+
+  private func showViewer() {
+    guard windowManager == nil else { return }
+
+    let manager = WindowCoverManager()
+    windowManager = manager
+
+    let controller = ImageViewerController(
+      imageSources: sources,
+      initialIndex: initialIndex,
+      sourceFrames: sourceFrames,
+      sourceContentMode: sourceContentMode,
+      configuration: configuration,
+      overlay: overlay,
+      closeButton: closeButton,
+      pageIndicator: pageIndicator,
+      emptyContent: emptyContent,
+      loadingContent: loadingContent,
+      errorContent: errorContent
+    )
+
+    controller.onDismiss = { [self] in
+      isPresented = false
+      hideViewer()
+    }
+
+    manager.show(viewController: controller)
+  }
+
+  private func hideViewer() {
+    windowManager?.hide()
+    windowManager = nil
   }
 }
