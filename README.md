@@ -1,19 +1,19 @@
 # ImageViewer
 
-A SwiftUI image viewer with smooth zoom transitions, pinch-to-zoom, and interactive dismiss gestures. Built with UIWindow to display above sheets and modals.
+A SwiftUI image viewer with smooth zoom transitions, gesture-based navigation, and full customization support.
 
-[![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)](https://swift.org)
+[![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-iOS%2017+-blue.svg)](https://developer.apple.com/ios/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## Features
 
-- **UIWindow-based**: Displays above sheets, modals, and other overlays
-- **Zoom Transition**: Smooth animation from source image to full-screen
-- **Pinch to Zoom**: Natural zoom gesture with configurable limits
-- **Double-tap Zoom**: Quick zoom toggle with smart positioning
-- **Interactive Dismiss**: Drag down to dismiss with visual feedback
-- **Swift 6 Ready**: Full concurrency support with Sendable conformance
+- **Smooth Transitions** - Photo app-like zoom transitions from thumbnail to fullscreen
+- **Gesture Support** - Pinch to zoom, double-tap zoom, swipe to dismiss, page navigation
+- **Multiple Images** - Horizontal swipe pagination with UIPageViewController
+- **Async Loading** - Seamless integration with Nuke, Kingfisher, SDWebImage, or any async loader
+- **Full Customization** - Custom overlay, close button, page indicator, loading/error views
+- **Accessibility** - VoiceOver, Dynamic Type, and Reduce Motion support
 
 ## Requirements
 
@@ -33,33 +33,29 @@ dependencies: [
 ]
 ```
 
-Or add it directly in Xcode via File → Add Package Dependencies.
+Or in Xcode: File → Add Package Dependencies → Enter the repository URL.
 
-## Usage
+## Quick Start
 
-### Basic Usage
+### Single Image
 
 ```swift
 import ImageViewer
-import SwiftUI
 
 struct ContentView: View {
-    @State private var showViewer = false
+    @State private var isPresented = false
     @State private var sourceFrame: CGRect = .zero
-    let image: UIImage
+    let image = UIImage(named: "sample")!
 
     var body: some View {
         Image(uiImage: image)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .readFrame { frame in
-                sourceFrame = frame
-            }
-            .onTapGesture {
-                showViewer = true
-            }
+            .frame(width: 200, height: 150)
+            .readFrame { sourceFrame = $0 }
+            .onTapGesture { isPresented = true }
             .imageViewer(
-                isPresented: $showViewer,
+                isPresented: $isPresented,
                 image: image,
                 sourceFrame: sourceFrame
             )
@@ -67,75 +63,208 @@ struct ContentView: View {
 }
 ```
 
-### With Configuration
+### Multiple Images (Gallery)
 
 ```swift
+struct GalleryView: View {
+    @State private var isPresented = false
+    @State private var selectedIndex = 0
+    @State private var sourceFrames: [CGRect] = Array(repeating: .zero, count: 6)
+    let images: [UIImage] = [...]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())]) {
+            ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 120)
+                    .clipped()
+                    .opacity(isPresented && selectedIndex == index ? 0 : 1)
+                    .readFrame { sourceFrames[index] = $0 }
+                    .onTapGesture {
+                        selectedIndex = index
+                        isPresented = true
+                    }
+            }
+        }
+        .imageViewer(
+            isPresented: $isPresented,
+            images: images,
+            initialIndex: selectedIndex,
+            sourceFrames: sourceFrames,
+            sourceContentMode: .fill,
+            configuration: ImageViewerConfiguration(
+                onPageChange: { selectedIndex = $0 }
+            )
+        )
+    }
+}
+```
+
+### Remote Images with Image Loading Libraries
+
+ImageViewer is designed to work with your preferred image loading library. Use the `.async` source to integrate with Nuke, Kingfisher, SDWebImage, or any async image loader.
+
+#### With Nuke
+
+```swift
+import Nuke
+
 .imageViewer(
-    isPresented: $showViewer,
-    image: image,
-    sourceFrame: sourceFrame,
-    configuration: ImageViewerConfiguration(
-        maxScale: 5.0,           // Maximum zoom scale
-        doubleTapScale: 3.0,     // Scale on double-tap
-        backgroundColor: .black,  // Background color
-        dismissThreshold: 100,    // Distance to trigger dismiss
-        dismissVelocityThreshold: 500  // Velocity to trigger dismiss
-    )
+    isPresented: $isPresented,
+    sources: urls.map { url in
+        .async({
+            try await ImagePipeline.shared.image(for: url)
+        }, placeholder: thumbnailCache[url])
+    }
 )
 ```
 
-### Using Inside a Sheet
-
-The viewer works seamlessly inside sheets because it uses a separate UIWindow:
+#### With Kingfisher
 
 ```swift
-.sheet(isPresented: $showSheet) {
+import Kingfisher
+
+.imageViewer(
+    isPresented: $isPresented,
+    sources: urls.map { url in
+        .async({
+            try await withCheckedThrowingContinuation { continuation in
+                KingfisherManager.shared.retrieveImage(with: url) { result in
+                    continuation.resume(with: result.map { $0.image })
+                }
+            }
+        }, placeholder: nil)
+    }
+)
+```
+
+#### With SDWebImage
+
+```swift
+import SDWebImage
+
+.imageViewer(
+    isPresented: $isPresented,
+    sources: urls.map { url in
+        .async({
+            try await withCheckedThrowingContinuation { continuation in
+                SDWebImageManager.shared.loadImage(with: url, progress: nil) { image, _, error, _, _, _ in
+                    if let image {
+                        continuation.resume(returning: image)
+                    } else {
+                        continuation.resume(throwing: error ?? URLError(.badServerResponse))
+                    }
+                }
+            }
+        }, placeholder: SDImageCache.shared.imageFromCache(forKey: url.absoluteString))
+    }
+)
+```
+
+#### Simple URLSession (no caching)
+
+```swift
+.imageViewer(
+    isPresented: $isPresented,
+    sources: urls.map { url in
+        .async({
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let image = UIImage(data: data) else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            return image
+        }, placeholder: nil)
+    }
+)
+```
+
+## Customization
+
+### Custom Overlay
+
+```swift
+.imageViewer(
+    isPresented: $isPresented,
+    images: images,
+    initialIndex: selectedIndex
+) { context in
     VStack {
-        Image(uiImage: image)
-            .readFrame { sourceFrame = $0 }
-            .onTapGesture { showViewer = true }
-            .imageViewer(
-                isPresented: $showViewer,
-                image: image,
-                sourceFrame: sourceFrame
-            )
+        Spacer()
+        Text("Image \(context.currentIndex + 1) of \(context.totalCount)")
+            .foregroundStyle(.white)
+            .padding()
     }
 }
 ```
 
-## How It Works
+### Full Customization
 
-### UIWindow Overlay
-
-Unlike `fullScreenCover`, this library creates a separate UIWindow with a high window level (`.alert + 1`). This ensures the viewer appears above:
-
-- Navigation bars
-- Tab bars
-- Sheets
-- Modals
-- Other overlays
-
-### Zoom Transition
-
-The viewer captures the source image's frame using the `readFrame` modifier and animates from that position to full-screen. On dismiss, it reverses the animation back to the source position.
-
-### Interactive Dismiss
-
-When not zoomed, dragging the image triggers an interactive dismiss:
-
-- The background fades as you drag
-- The image scales down toward the source position
-- Release to dismiss or snap back
+```swift
+.imageViewer(
+    isPresented: $isPresented,
+    sources: imageSources,
+    initialIndex: 0,
+    sourceFrames: frames,
+    sourceContentMode: .fill,
+    configuration: ImageViewerConfiguration(
+        maxScale: 10.0,
+        doubleTapScale: 3.0,
+        backgroundColor: .black,
+        dismissThreshold: 100,
+        onPageChange: { print("Page: \($0)") }
+    ),
+    overlay: { context in CustomOverlay(context: context) },
+    closeButton: { dismiss in CustomCloseButton(action: dismiss) },
+    pageIndicator: { current, total in CustomPageIndicator(current: current, total: total) },
+    emptyContent: { dismiss in CustomEmptyView(dismiss: dismiss) },
+    loadingContent: { CustomLoadingView() },
+    errorContent: { error in CustomErrorView(error: error) }
+)
+```
 
 ## Configuration Options
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `maxScale` | `CGFloat` | 5.0 | Maximum zoom scale |
-| `doubleTapScale` | `CGFloat` | 3.0 | Scale applied on double-tap |
-| `backgroundColor` | `Color` | `.black` | Background color of the viewer |
-| `dismissThreshold` | `CGFloat` | 100 | Distance in points to trigger dismiss |
-| `dismissVelocityThreshold` | `CGFloat` | 500 | Velocity in points/second to trigger dismiss |
+| `maxScale` | `CGFloat` | `5.0` | Maximum zoom scale |
+| `doubleTapScale` | `CGFloat` | `3.0` | Zoom scale on double-tap |
+| `backgroundColor` | `Color` | `.black` | Viewer background color |
+| `transitionCornerRadius` | `CGFloat` | `8` | Corner radius during transition |
+| `dismissThreshold` | `CGFloat` | `100` | Vertical distance to trigger dismiss |
+| `dismissVelocityThreshold` | `CGFloat` | `500` | Velocity threshold for dismiss |
+| `onDismiss` | `(() -> Void)?` | `nil` | Called when viewer is dismissed |
+| `onPageChange` | `((Int) -> Void)?` | `nil` | Called when page changes |
+
+## Image Sources
+
+```swift
+// Pre-loaded UIImage (most common)
+ImageSource.image(uiImage)
+
+// Async loader with optional placeholder
+// Use this to integrate with your image loading library
+ImageSource.async({ try await fetchImage() }, placeholder: thumbnailImage)
+```
+
+## Gestures
+
+| Gesture | Action |
+|---------|--------|
+| Pinch | Zoom in/out |
+| Double-tap | Toggle zoom (1x ↔ 3x) |
+| Drag (when zoomed) | Pan image |
+| Vertical swipe | Dismiss viewer |
+| Horizontal swipe | Navigate pages (multi-image) |
+| Tap background | Dismiss viewer |
+
+## Accessibility
+
+- VoiceOver labels and hints
+- Magic Tap to dismiss
+- Escape action support
+- Reduce Motion support (simplified animations)
 
 ## License
 

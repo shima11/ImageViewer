@@ -21,14 +21,21 @@ public struct ImageViewerContext {
 // MARK: - Image Source
 
 /// Represents a source for loading images in the viewer.
+///
+/// For remote images, use `.async` with your preferred image loading library:
+/// ```swift
+/// // With Nuke
+/// .async({ try await ImagePipeline.shared.image(for: url) }, placeholder: thumbnail)
+///
+/// // With Kingfisher
+/// .async({ try await KingfisherManager.shared.retrieveImage(with: url) }, placeholder: nil)
+/// ```
 public enum ImageSource: Sendable {
-  /// A UIImage instance.
+  /// A pre-loaded UIImage instance.
   case image(UIImage)
 
-  /// A URL to load the image from, with an optional placeholder.
-  case url(URL, placeholder: UIImage? = nil)
-
   /// An async closure that returns an image.
+  /// Use this to integrate with your preferred image loading library (Nuke, Kingfisher, SDWebImage, etc.)
   case async(@Sendable () async throws -> UIImage, placeholder: UIImage? = nil)
 
   /// Returns the placeholder image if available.
@@ -36,8 +43,6 @@ public enum ImageSource: Sendable {
     switch self {
     case .image:
       return nil
-    case .url(_, let placeholder):
-      return placeholder
     case .async(_, let placeholder):
       return placeholder
     }

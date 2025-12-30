@@ -431,7 +431,7 @@ private struct ImagePageContentView: View {
     switch imageSource {
     case .image(let image):
       return image
-    case .url, .async:
+    case .async:
       return loadedImage ?? imageSource.placeholder
     }
   }
@@ -484,38 +484,15 @@ private struct ImagePageContentView: View {
     case .image:
       break
 
-    case .url(let url, _):
-      await loadImage(from: url)
-
     case .async(let loader, _):
-      await loadImage(using: loader)
-    }
-  }
+      isLoading = true
+      defer { isLoading = false }
 
-  private func loadImage(from url: URL) async {
-    isLoading = true
-    defer { isLoading = false }
-
-    do {
-      let (data, _) = try await URLSession.shared.data(from: url)
-      if let image = UIImage(data: data) {
-        loadedImage = image
-      } else {
-        loadError = ImageLoadingError.invalidData
+      do {
+        loadedImage = try await loader()
+      } catch {
+        loadError = error
       }
-    } catch {
-      loadError = error
-    }
-  }
-
-  private func loadImage(using loader: @Sendable () async throws -> UIImage) async {
-    isLoading = true
-    defer { isLoading = false }
-
-    do {
-      loadedImage = try await loader()
-    } catch {
-      loadError = error
     }
   }
 }
