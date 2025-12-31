@@ -260,7 +260,7 @@ final class ImageViewerController: UIViewController {
       setupMultipleImagesViewer(initialImage: image)
     }
 
-    setupOverlay()
+    updateOverlay()
   }
 
   private func setupSingleImageViewer(with image: UIImage) {
@@ -272,13 +272,12 @@ final class ImageViewerController: UIViewController {
     self.transitionImageView = transitionImageView
 
     // Create transition animator
-    let sourceFrame = sourceFrames?.first
     transitionAnimator = ImageViewerTransitionAnimator(
       imageView: transitionImageView,
       containerView: view,
       backgroundView: backgroundView,
       image: image,
-      sourceFrame: sourceFrame,
+      sourceFrame: getSourceFrame(for: 0),
       sourceContentMode: sourceContentMode,
       configuration: configuration
     )
@@ -298,13 +297,12 @@ final class ImageViewerController: UIViewController {
     self.transitionImageView = transitionImageView
 
     // Create transition animator
-    let sourceFrame = sourceFrames.flatMap { $0.indices.contains(currentIndex) ? $0[currentIndex] : nil }
     transitionAnimator = ImageViewerTransitionAnimator(
       imageView: transitionImageView,
       containerView: view,
       backgroundView: backgroundView,
       image: initialImage,
-      sourceFrame: sourceFrame,
+      sourceFrame: getSourceFrame(for: currentIndex),
       sourceContentMode: sourceContentMode,
       configuration: configuration
     )
@@ -331,10 +329,6 @@ final class ImageViewerController: UIViewController {
     for index in indicesToPreload {
       loadImageAsync(at: index) { _ in }
     }
-  }
-
-  private func setupOverlay() {
-    updateOverlay()
   }
 
   private func updateOverlay() {
@@ -466,9 +460,6 @@ final class ImageViewerController: UIViewController {
       if let initialController = makePageController(for: currentIndex) {
         pageVC.setViewControllers([initialController], direction: .forward, animated: false)
       }
-
-      // Configure gesture relationships with UIPageViewController's internal scroll view
-      configurePageViewControllerGestures(pageVC)
     }
 
     // Bring overlay to front
@@ -513,14 +504,14 @@ final class ImageViewerController: UIViewController {
       transitionImageView?.image = currentImage
       transitionImageView?.isHidden = false
 
-      // Update source frame for current index
-      if let sourceFrame = sourceFrames.flatMap({ $0.indices.contains(currentIndex) ? $0[currentIndex] : nil }) {
+      // Update animator with current image and source frame
+      if let imageView = transitionImageView {
         transitionAnimator = ImageViewerTransitionAnimator(
-          imageView: transitionImageView!,
+          imageView: imageView,
           containerView: view,
           backgroundView: backgroundView,
           image: currentImage,
-          sourceFrame: sourceFrame,
+          sourceFrame: getSourceFrame(for: currentIndex),
           sourceContentMode: sourceContentMode,
           configuration: configuration
         )
@@ -528,16 +519,42 @@ final class ImageViewerController: UIViewController {
     }
 
     // Hide overlay
-    overlayHostingController?.view.alpha = 0
-    closeButtonHostingController?.view.alpha = 0
+    updateOverlayAlpha(0)
   }
 
   private func getCurrentImage() -> UIImage? {
-    if singleImageController != nil {
-      return loadedImages[0]
-    } else {
-      return loadedImages[currentIndex]
-    }
+    loadedImages[singleImageController != nil ? 0 : currentIndex]
+  }
+
+  private func getSourceFrame(for index: Int) -> CGRect? {
+    sourceFrames.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+  }
+
+  private func updateOverlayAlpha(_ alpha: CGFloat) {
+    overlayHostingController?.view.alpha = alpha
+    closeButtonHostingController?.view.alpha = alpha
+  }
+
+  private func prepareTransitionForInteractiveDismiss() {
+    guard transitionImageView?.isHidden == true,
+          let currentImage = getCurrentImage(),
+          let imageView = transitionImageView
+    else { return }
+
+    imageView.image = currentImage
+    transitionAnimator = ImageViewerTransitionAnimator(
+      imageView: imageView,
+      containerView: view,
+      backgroundView: backgroundView,
+      image: currentImage,
+      sourceFrame: getSourceFrame(for: currentIndex),
+      sourceContentMode: sourceContentMode,
+      configuration: configuration
+    )
+
+    imageView.isHidden = false
+    singleImageController?.view.isHidden = true
+    pageViewController?.view.isHidden = true
   }
 
   // MARK: - Background Tap
@@ -588,87 +605,6 @@ final class ImageViewerController: UIViewController {
     return renderer.image { context in
       UIColor.clear.setFill()
       context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
-    }
-  }
-
-  // MARK: - Page View Controller Gestures
-
-  private func configurePageViewControllerGestures(_ pageVC: UIPageViewController) {
-    // Find the internal scroll view of UIPageViewController
-    guard let scrollView = pageVC.view.subviews.first(where: { $0 is UIScrollView }) as? UIScrollView else {
-      return
-    }
-
-    // Store reference for later use
-    pageViewControllerScrollView = scrollView
-  }
-
-  private weak var pageViewControllerScrollView: UIScrollView?
-
-  private lazy var multiImageDismissPanGesture: UIPanGestureRecognizer = {
-    let gesture = UIPanGestureRecognizer(target: self, action: #selector(handleMultiImageDismissPan(_:)))
-    gesture.delegate = self
-    return gesture
-  }()
-
-  @objc private func handleMultiImageDismissPan(_ gesture: UIPanGestureRecognizer) {
-    let translation = gesture.translation(in: view)
-    let velocity = gesture.velocity(in: view)
-
-    switch gesture.state {
-    case .changed:
-      let progress = min(abs(translation.y) / 300, 1.0)
-
-      // Update transition
-      if transitionImageView?.isHidden == true {
-        if let currentImage = getCurrentImage() {
-          transitionImageView?.image = currentImage
-
-          let sourceFrame = sourceFrames.flatMap { $0.indices.contains(currentIndex) ? $0[currentIndex] : nil }
-          transitionAnimator = ImageViewerTransitionAnimator(
-            imageView: transitionImageView!,
-            containerView: view,
-            backgroundView: backgroundView,
-            image: currentImage,
-            sourceFrame: sourceFrame,
-            sourceContentMode: sourceContentMode,
-            configuration: configuration
-          )
-        }
-
-        transitionImageView?.isHidden = false
-        pageViewController?.view.isHidden = true
-      }
-
-      transitionState = .interactive(progress: progress, translation: translation)
-      transitionAnimator?.updateInteractiveTransition(progress: progress, translation: translation)
-      overlayHostingController?.view.alpha = 1 - progress
-      closeButtonHostingController?.view.alpha = 1 - progress
-
-    case .ended, .cancelled:
-      let shouldDismiss = abs(translation.y) > configuration.dismissThreshold
-        || abs(velocity.y) > configuration.dismissVelocityThreshold
-
-      if shouldDismiss {
-        transitionState = .dismissing
-        overlayHostingController?.view.alpha = 0
-        closeButtonHostingController?.view.alpha = 0
-        transitionAnimator?.completeInteractiveDismiss { [weak self] in
-          self?.configuration.onDismiss?()
-          self?.onDismiss?()
-        }
-      } else {
-        transitionAnimator?.cancelInteractiveTransition { [weak self] in
-          self?.transitionState = .presented
-          self?.transitionImageView?.isHidden = true
-          self?.pageViewController?.view.isHidden = false
-          self?.overlayHostingController?.view.alpha = 1
-          self?.closeButtonHostingController?.view.alpha = 1
-        }
-      }
-
-    default:
-      break
     }
   }
 
@@ -727,37 +663,6 @@ extension ImageViewerController: UIPageViewControllerDelegate {
   }
 }
 
-// MARK: - UIGestureRecognizerDelegate
-
-extension ImageViewerController: UIGestureRecognizerDelegate {
-
-  func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-    guard gestureRecognizer == multiImageDismissPanGesture else { return true }
-
-    // Check if current page is at minimum zoom
-    if let currentVC = pageViewController?.viewControllers?.first as? ZoomableImageViewController,
-       !currentVC.isAtMinimumZoom {
-      return false
-    }
-
-    // Only allow vertical pan
-    let velocity = multiImageDismissPanGesture.velocity(in: view)
-    return abs(velocity.y) > abs(velocity.x)
-  }
-
-  func gestureRecognizer(
-    _ gestureRecognizer: UIGestureRecognizer,
-    shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
-  ) -> Bool {
-    // Allow our dismiss gesture to work simultaneously with page view controller's scroll
-    if gestureRecognizer == multiImageDismissPanGesture,
-       otherGestureRecognizer.view == pageViewControllerScrollView {
-      return true
-    }
-    return false
-  }
-}
-
 // MARK: - ZoomableImageViewControllerDelegate
 
 extension ImageViewerController: ZoomableImageViewControllerDelegate {
@@ -768,43 +673,14 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
     translation: CGPoint
   ) {
     transitionState = .interactive(progress: progress, translation: translation)
-
-    // Show transition image view for interactive dismiss
-    if transitionImageView?.isHidden == true {
-      // Update transition image view with current image
-      if let currentImage = getCurrentImage() {
-        transitionImageView?.image = currentImage
-
-        // Recreate animator with current image and source frame
-        let sourceFrame = sourceFrames.flatMap { $0.indices.contains(currentIndex) ? $0[currentIndex] : nil }
-        transitionAnimator = ImageViewerTransitionAnimator(
-          imageView: transitionImageView!,
-          containerView: view,
-          backgroundView: backgroundView,
-          image: currentImage,
-          sourceFrame: sourceFrame,
-          sourceContentMode: sourceContentMode,
-          configuration: configuration
-        )
-      }
-
-      transitionImageView?.isHidden = false
-      singleImageController?.view.isHidden = true
-      pageViewController?.view.isHidden = true
-    }
-
+    prepareTransitionForInteractiveDismiss()
     transitionAnimator?.updateInteractiveTransition(progress: progress, translation: translation)
-
-    // Fade overlay
-    overlayHostingController?.view.alpha = 1 - progress
-    closeButtonHostingController?.view.alpha = 1 - progress
+    updateOverlayAlpha(1 - progress)
   }
 
   func zoomableImageViewControllerDidRequestDismiss(_ controller: ZoomableImageViewController) {
     transitionState = .dismissing
-    overlayHostingController?.view.alpha = 0
-    closeButtonHostingController?.view.alpha = 0
-
+    updateOverlayAlpha(0)
     transitionAnimator?.completeInteractiveDismiss { [weak self] in
       self?.configuration.onDismiss?()
       self?.onDismiss?()
@@ -817,8 +693,7 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
       self?.transitionImageView?.isHidden = true
       self?.singleImageController?.view.isHidden = false
       self?.pageViewController?.view.isHidden = false
-      self?.overlayHostingController?.view.alpha = 1
-      self?.closeButtonHostingController?.view.alpha = 1
+      self?.updateOverlayAlpha(1)
     }
   }
 

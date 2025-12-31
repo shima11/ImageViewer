@@ -99,7 +99,7 @@ final class WindowCoverManager {
       return
     }
 
-    let window = PassthroughWindow(windowScene: windowScene)
+    let window = UIWindow(windowScene: windowScene)
     window.backgroundColor = .clear
     window.windowLevel = .alert + 1
 
@@ -120,7 +120,7 @@ final class WindowCoverManager {
       return
     }
 
-    let window = PassthroughWindow(windowScene: windowScene)
+    let window = UIWindow(windowScene: windowScene)
     window.backgroundColor = .clear
     window.windowLevel = .alert + 1
     window.rootViewController = viewController
@@ -134,12 +134,6 @@ final class WindowCoverManager {
     window?.resignKey()
     window = nil
   }
-}
-
-// MARK: - Passthrough Window
-
-private final class PassthroughWindow: UIWindow {
-  // No custom hitTest - allow all touches to be handled normally
 }
 
 // MARK: - Dismiss Environment
