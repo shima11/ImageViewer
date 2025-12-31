@@ -16,16 +16,8 @@ import SwiftUI
   GalleryWithCaptionsPreview()
 }
 
-#Preview("Text Page Indicator") {
-  TextPageIndicatorPreview()
-}
-
 #Preview("Custom UI") {
   CustomUIPreview()
-}
-
-#Preview("Empty Gallery") {
-  EmptyGalleryPreview()
 }
 
 #Preview("Fill Mode Transition") {
@@ -224,49 +216,6 @@ private struct GalleryWithCaptionsPreview: View {
   }
 }
 
-private struct TextPageIndicatorPreview: View {
-  @State private var isPresented = false
-  @State private var selectedIndex = 0
-
-  private let images = PreviewImageGenerator.sampleImages
-
-  var body: some View {
-    NavigationStack {
-      VStack {
-        Text("Text style page indicator")
-          .foregroundStyle(.secondary)
-          .padding()
-
-        Button("Open Gallery") {
-          isPresented = true
-        }
-        .buttonStyle(.borderedProminent)
-
-        Spacer()
-      }
-      .navigationTitle("Text Indicator")
-      .imageViewer(
-        isPresented: $isPresented,
-        sources: images.map { .image($0) },
-        initialIndex: selectedIndex,
-        overlay: { _ in EmptyView() },
-        closeButton: { DefaultCloseButton(dismiss: $0) },
-        pageIndicator: { currentIndex, totalCount in
-          // Custom text-style page indicator
-          Text("\(currentIndex + 1) / \(totalCount)")
-            .font(.subheadline.monospacedDigit())
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.black.opacity(0.5), in: Capsule())
-        },
-        loadingContent: { DefaultLoadingView() },
-        errorContent: { DefaultErrorView(error: $0) }
-      )
-    }
-  }
-}
-
 private struct CustomUIPreview: View {
   @State private var isPresented = false
   @State private var selectedIndex = 0
@@ -368,33 +317,6 @@ private struct CustomUIPreview: View {
           }
           .padding()
         }
-      )
-    }
-  }
-}
-
-private struct EmptyGalleryPreview: View {
-  @State private var isPresented = false
-
-  var body: some View {
-    NavigationStack {
-      VStack {
-        Text("Empty gallery handling")
-          .foregroundStyle(.secondary)
-          .padding()
-
-        Button("Open Empty Gallery") {
-          isPresented = true
-        }
-        .buttonStyle(.borderedProminent)
-
-        Spacer()
-      }
-      .navigationTitle("Empty Gallery")
-      .imageViewer(
-        isPresented: $isPresented,
-        images: [],
-        initialIndex: 0
       )
     }
   }
