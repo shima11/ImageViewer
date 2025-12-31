@@ -2,10 +2,6 @@ import SwiftUI
 
 // MARK: - Single Image Previews
 
-#Preview("Single Image") {
-  SingleImagePreview()
-}
-
 #Preview("With Overlay") {
   SingleImageWithOverlayPreview()
 }
@@ -37,48 +33,6 @@ import SwiftUI
 }
 
 // MARK: - Single Image Preview Views
-
-private struct SingleImagePreview: View {
-  @State private var isPresented = false
-  @State private var sourceFrame: CGRect = .zero
-
-  private let sampleImage = PreviewImageGenerator.gradient(
-    colors: (.systemBlue, .systemPurple),
-    size: CGSize(width: 800, height: 600)
-  )
-
-  var body: some View {
-    NavigationStack {
-      VStack {
-        Text("Tap the image to open viewer")
-          .foregroundStyle(.secondary)
-          .padding()
-
-        Image(uiImage: sampleImage)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: 200, height: 150)
-          .clipShape(RoundedRectangle(cornerRadius: 12))
-          .shadow(radius: 4)
-          .opacity(isPresented ? 0 : 1)
-          .readFrame { frame in
-            sourceFrame = frame
-          }
-          .onTapGesture {
-            isPresented = true
-          }
-
-        Spacer()
-      }
-      .navigationTitle("ImageViewer")
-      .imageViewer(
-        isPresented: $isPresented,
-        image: sampleImage,
-        sourceFrame: sourceFrame
-      )
-    }
-  }
-}
 
 private struct SingleImageWithOverlayPreview: View {
   @State private var isPresented = false
@@ -306,7 +260,6 @@ private struct TextPageIndicatorPreview: View {
             .padding(.vertical, 6)
             .background(.black.opacity(0.5), in: Capsule())
         },
-        emptyContent: { DefaultEmptyView(dismiss: $0) },
         loadingContent: { DefaultLoadingView() },
         errorContent: { DefaultErrorView(error: $0) }
       )
@@ -385,22 +338,6 @@ private struct CustomUIPreview: View {
                   .frame(width: 8, height: 8)
               }
             }
-          }
-        },
-        emptyContent: { dismiss in
-          // Custom empty state
-          VStack(spacing: 20) {
-            Image(systemName: "photo.stack")
-              .font(.system(size: 60))
-              .foregroundStyle(.white.opacity(0.4))
-
-            Text("No Photos")
-              .font(.title2.bold())
-              .foregroundStyle(.white)
-
-            Button("Close", action: dismiss)
-              .buttonStyle(.bordered)
-              .tint(.white)
           }
         },
         loadingContent: {

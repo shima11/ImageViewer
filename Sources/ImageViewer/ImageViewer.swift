@@ -155,31 +155,6 @@ public struct DefaultPageIndicator: View {
   }
 }
 
-/// Default empty state view for the image viewer.
-public struct DefaultEmptyView: View {
-  let dismiss: () -> Void
-
-  public init(dismiss: @escaping () -> Void) {
-    self.dismiss = dismiss
-  }
-
-  public var body: some View {
-    VStack(spacing: 16) {
-      Image(systemName: "photo.on.rectangle.angled")
-        .font(.largeTitle)
-        .foregroundStyle(.white.opacity(0.6))
-
-      Text("No images")
-        .foregroundStyle(.white.opacity(0.8))
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(Text("No images available"))
-    .onTapGesture {
-      dismiss()
-    }
-  }
-}
-
 /// Default loading view for the image viewer.
 public struct DefaultLoadingView: View {
   public init() {}
@@ -232,14 +207,12 @@ extension View {
   ///   - overlay: Custom overlay content.
   ///   - closeButton: Custom close button.
   ///   - pageIndicator: Custom page indicator.
-  ///   - emptyContent: Custom empty state view.
   ///   - loadingContent: Custom loading view.
   ///   - errorContent: Custom error view.
   public func imageViewer<
     Overlay: View,
     CloseButton: View,
     PageIndicator: View,
-    EmptyContent: View,
     LoadingContent: View,
     ErrorContent: View
   >(
@@ -252,7 +225,6 @@ extension View {
     @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay,
     @ViewBuilder closeButton: @escaping (_ dismiss: @escaping () -> Void) -> CloseButton,
     @ViewBuilder pageIndicator: @escaping (_ currentIndex: Int, _ totalCount: Int) -> PageIndicator,
-    @ViewBuilder emptyContent: @escaping (_ dismiss: @escaping () -> Void) -> EmptyContent,
     @ViewBuilder loadingContent: @escaping () -> LoadingContent,
     @ViewBuilder errorContent: @escaping (Error) -> ErrorContent
   ) -> some View {
@@ -267,7 +239,6 @@ extension View {
         overlay: overlay,
         closeButton: closeButton,
         pageIndicator: pageIndicator,
-        emptyContent: emptyContent,
         loadingContent: loadingContent,
         errorContent: errorContent
       )
@@ -304,7 +275,6 @@ extension View {
       overlay: { _ in EmptyView() },
       closeButton: { DefaultCloseButton(dismiss: $0) },
       pageIndicator: { DefaultPageIndicator(currentIndex: $0, totalCount: $1) },
-      emptyContent: { DefaultEmptyView(dismiss: $0) },
       loadingContent: { DefaultLoadingView() },
       errorContent: { DefaultErrorView(error: $0) }
     )
@@ -330,7 +300,6 @@ extension View {
       overlay: overlay,
       closeButton: { DefaultCloseButton(dismiss: $0) },
       pageIndicator: { DefaultPageIndicator(currentIndex: $0, totalCount: $1) },
-      emptyContent: { DefaultEmptyView(dismiss: $0) },
       loadingContent: { DefaultLoadingView() },
       errorContent: { DefaultErrorView(error: $0) }
     )
@@ -443,7 +412,6 @@ private struct ImageViewerModifier<
   Overlay: View,
   CloseButton: View,
   PageIndicator: View,
-  EmptyContent: View,
   LoadingContent: View,
   ErrorContent: View
 >: ViewModifier {
@@ -456,7 +424,6 @@ private struct ImageViewerModifier<
   @ViewBuilder var overlay: (ImageViewerContext) -> Overlay
   @ViewBuilder var closeButton: (_ dismiss: @escaping () -> Void) -> CloseButton
   @ViewBuilder var pageIndicator: (_ currentIndex: Int, _ totalCount: Int) -> PageIndicator
-  @ViewBuilder var emptyContent: (_ dismiss: @escaping () -> Void) -> EmptyContent
   @ViewBuilder var loadingContent: () -> LoadingContent
   @ViewBuilder var errorContent: (Error) -> ErrorContent
 
@@ -476,6 +443,12 @@ private struct ImageViewerModifier<
   private func showViewer() {
     guard windowManager == nil else { return }
 
+    // Do not present if there are no images
+    guard !sources.isEmpty else {
+      isPresented = false
+      return
+    }
+
     let manager = WindowCoverManager()
     windowManager = manager
 
@@ -488,7 +461,6 @@ private struct ImageViewerModifier<
       overlay: overlay,
       closeButton: closeButton,
       pageIndicator: pageIndicator,
-      emptyContent: emptyContent,
       loadingContent: loadingContent,
       errorContent: errorContent
     )

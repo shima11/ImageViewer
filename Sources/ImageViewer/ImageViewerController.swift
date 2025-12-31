@@ -16,7 +16,6 @@ final class ImageViewerController: UIViewController {
   private let overlayBuilder: (ImageViewerContext) -> AnyView
   private let closeButtonBuilder: (@escaping () -> Void) -> AnyView
   private let pageIndicatorBuilder: (Int, Int) -> AnyView
-  private let emptyContentBuilder: (@escaping () -> Void) -> AnyView
   private let loadingContentBuilder: () -> AnyView
   private let errorContentBuilder: (Error) -> AnyView
 
@@ -49,7 +48,6 @@ final class ImageViewerController: UIViewController {
     Overlay: View,
     CloseButton: View,
     PageIndicator: View,
-    EmptyContent: View,
     LoadingContent: View,
     ErrorContent: View
   >(
@@ -61,7 +59,6 @@ final class ImageViewerController: UIViewController {
     @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay,
     @ViewBuilder closeButton: @escaping (@escaping () -> Void) -> CloseButton,
     @ViewBuilder pageIndicator: @escaping (Int, Int) -> PageIndicator,
-    @ViewBuilder emptyContent: @escaping (@escaping () -> Void) -> EmptyContent,
     @ViewBuilder loadingContent: @escaping () -> LoadingContent,
     @ViewBuilder errorContent: @escaping (Error) -> ErrorContent
   ) {
@@ -75,7 +72,6 @@ final class ImageViewerController: UIViewController {
     self.overlayBuilder = { context in AnyView(overlay(context)) }
     self.closeButtonBuilder = { dismiss in AnyView(closeButton(dismiss)) }
     self.pageIndicatorBuilder = { current, total in AnyView(pageIndicator(current, total)) }
-    self.emptyContentBuilder = { dismiss in AnyView(emptyContent(dismiss)) }
     self.loadingContentBuilder = { AnyView(loadingContent()) }
     self.errorContentBuilder = { error in AnyView(errorContent(error)) }
     super.init(nibName: nil, bundle: nil)
@@ -91,12 +87,7 @@ final class ImageViewerController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     setupBackground()
-
-    if imageSources.isEmpty {
-      setupEmptyState()
-    } else {
-      loadInitialImage()
-    }
+    loadInitialImage()
   }
 
   override func viewDidAppear(_ animated: Bool) {
@@ -129,25 +120,6 @@ final class ImageViewerController: UIViewController {
     // Add tap gesture to background
     let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleBackgroundTap))
     backgroundView.addGestureRecognizer(tapGesture)
-  }
-
-  private func setupEmptyState() {
-    let emptyView = emptyContentBuilder(dismiss)
-    let hostingController = UIHostingController(rootView: emptyView)
-    addChild(hostingController)
-    view.addSubview(hostingController.view)
-    hostingController.view.backgroundColor = .clear
-    hostingController.view.translatesAutoresizingMaskIntoConstraints = false
-
-    NSLayoutConstraint.activate([
-      hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
-      hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-      hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-      hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-    ])
-
-    hostingController.didMove(toParent: self)
-    backgroundView.alpha = 1
   }
 
   // MARK: - Image Loading
