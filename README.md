@@ -218,7 +218,6 @@ import SDWebImage
     overlay: { context in CustomOverlay(context: context) },
     closeButton: { dismiss in CustomCloseButton(action: dismiss) },
     pageIndicator: { current, total in CustomPageIndicator(current: current, total: total) },
-    emptyContent: { dismiss in CustomEmptyView(dismiss: dismiss) },
     loadingContent: { CustomLoadingView() },
     errorContent: { error in CustomErrorView(error: error) }
 )
@@ -252,8 +251,9 @@ ImageSource.async({ try await fetchImage() }, placeholder: thumbnailImage)
 
 | Gesture | Action |
 |---------|--------|
-| Pinch | Zoom in/out |
+| Single tap | Toggle overlay visibility |
 | Double-tap | Toggle zoom (1x ↔ 3x) |
+| Pinch | Zoom in/out |
 | Drag (when zoomed) | Pan image |
 | Vertical swipe | Dismiss viewer |
 | Horizontal swipe | Navigate pages (multi-image) |
