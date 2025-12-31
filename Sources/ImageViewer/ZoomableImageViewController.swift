@@ -22,7 +22,7 @@ final class ZoomableImageViewController: UIViewController {
 
   private let scrollView = UIScrollView()
   private let imageView = UIImageView()
-  private let image: UIImage
+  private(set) var currentImage: UIImage
   private let configuration: ImageViewerConfiguration
 
   weak var delegate: ZoomableImageViewControllerDelegate?
@@ -60,7 +60,7 @@ final class ZoomableImageViewController: UIViewController {
   // MARK: - Init
 
   init(image: UIImage, configuration: ImageViewerConfiguration) {
-    self.image = image
+    self.currentImage = image
     self.configuration = configuration
     super.init(nibName: nil, bundle: nil)
   }
@@ -68,6 +68,28 @@ final class ZoomableImageViewController: UIViewController {
   @available(*, unavailable)
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
+  }
+
+  // MARK: - Image Update
+
+  func updateImage(_ newImage: UIImage) {
+    guard newImage !== currentImage else { return }
+
+    currentImage = newImage
+    imageView.image = newImage
+
+    // Update content size and zoom
+    let imageSize = newImage.size
+    imageView.frame = CGRect(origin: .zero, size: imageSize)
+    scrollView.contentSize = imageSize
+
+    // Reset zoom scale
+    hasInitializedZoomScale = false
+    if view.bounds.size != .zero {
+      updateZoomScaleForSize(view.bounds.size)
+      hasInitializedZoomScale = true
+      centerImageInScrollView()
+    }
   }
 
   // MARK: - Lifecycle
@@ -115,12 +137,12 @@ final class ZoomableImageViewController: UIViewController {
     ])
 
     // ImageView setup (using manual frame, not Auto Layout)
-    imageView.image = image
+    imageView.image = currentImage
     imageView.contentMode = .scaleAspectFit
     scrollView.addSubview(imageView)
 
     // Set initial image size
-    let imageSize = image.size
+    let imageSize = currentImage.size
     imageView.frame = CGRect(origin: .zero, size: imageSize)
     scrollView.contentSize = imageSize
   }
@@ -144,10 +166,10 @@ final class ZoomableImageViewController: UIViewController {
   // MARK: - Zoom Scale
 
   private func updateZoomScaleForSize(_ size: CGSize) {
-    guard image.size.width > 0, image.size.height > 0 else { return }
+    guard currentImage.size.width > 0, currentImage.size.height > 0 else { return }
 
-    let widthScale = size.width / image.size.width
-    let heightScale = size.height / image.size.height
+    let widthScale = size.width / currentImage.size.width
+    let heightScale = size.height / currentImage.size.height
     let minZoomScale = min(widthScale, heightScale)
 
     scrollView.minimumZoomScale = minZoomScale
@@ -156,10 +178,10 @@ final class ZoomableImageViewController: UIViewController {
   }
 
   private func updateZoomScaleLimits(for size: CGSize) {
-    guard image.size.width > 0, image.size.height > 0 else { return }
+    guard currentImage.size.width > 0, currentImage.size.height > 0 else { return }
 
-    let widthScale = size.width / image.size.width
-    let heightScale = size.height / image.size.height
+    let widthScale = size.width / currentImage.size.width
+    let heightScale = size.height / currentImage.size.height
     let minZoomScale = min(widthScale, heightScale)
 
     scrollView.minimumZoomScale = minZoomScale

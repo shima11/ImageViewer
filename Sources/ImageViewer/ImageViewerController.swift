@@ -29,6 +29,7 @@ final class ImageViewerController: UIViewController {
   private var singleImageController: ZoomableImageViewController?
   private var overlayHostingController: UIHostingController<AnyView>?
   private var overlayContainerView: PassthroughContainerView?
+  private var closeButtonHostingController: UIHostingController<AnyView>?
   private var transitionImageView: UIImageView?
   private var transitionAnimator: ImageViewerTransitionAnimator?
   private var isOverlayVisible: Bool = true
@@ -38,6 +39,7 @@ final class ImageViewerController: UIViewController {
   private var loadedImages: [Int: UIImage] = [:]
   private var loadingTasks: [Int: Task<Void, Never>] = [:]
   private var loadErrors: [Int: Error] = [:]
+  private var cachedPageControllers: [Int: ZoomableImageViewController] = [:]
 
   // MARK: - Callbacks
 
@@ -126,60 +128,89 @@ final class ImageViewerController: UIViewController {
   // MARK: - Image Loading
 
   private func loadInitialImage() {
-    loadImage(at: currentIndex) { [weak self] result in
-      guard let self = self else { return }
+    // Pre-load all UIImage sources synchronously
+    preloadAllSyncImages()
 
-      switch result {
-      case .success(let image):
-        self.setupImageViewer(with: image)
-      case .failure(let error):
-        self.showError(error)
+    // Load the initial image
+    if let image = loadedImages[currentIndex] {
+      setupImageViewer(with: image)
+    } else {
+      // Need to load async
+      showLoading()
+      loadImageAsync(at: currentIndex) { [weak self] result in
+        guard let self = self else { return }
+        self.hideLoading()
+
+        switch result {
+        case .success(let image):
+          self.setupImageViewer(with: image)
+        case .failure(let error):
+          self.showError(error)
+        }
       }
     }
   }
 
-  private func loadImage(at index: Int, completion: @escaping (Result<UIImage, Error>) -> Void) {
+  private func preloadAllSyncImages() {
+    for (index, source) in imageSources.enumerated() {
+      if case .image(let image) = source {
+        loadedImages[index] = image
+      }
+    }
+  }
+
+  private func loadImageAsync(at index: Int, completion: @escaping (Result<UIImage, Error>) -> Void) {
     guard index >= 0, index < imageSources.count else {
       completion(.failure(ImageViewerError.invalidData))
       return
     }
 
-    // Check if already loaded
+    // Already loaded
     if let image = loadedImages[index] {
       completion(.success(image))
       return
     }
 
+    // Already loading
+    if loadingTasks[index] != nil {
+      return
+    }
+
     let source = imageSources[index]
 
-    switch source {
-    case .image(let image):
-      loadedImages[index] = image
-      completion(.success(image))
+    guard case .async(let loader, _) = source else {
+      completion(.failure(ImageViewerError.invalidData))
+      return
+    }
 
-    case .async(let loader, let placeholder):
-      // Show placeholder if available
-      if let placeholder = placeholder {
-        loadedImages[index] = placeholder
+    let task = Task { @MainActor in
+      do {
+        let image = try await loader()
+        self.loadedImages[index] = image
+        self.loadingTasks.removeValue(forKey: index)
+        completion(.success(image))
+
+        // Update cached controller if exists
+        self.updateCachedController(at: index, with: image)
+      } catch {
+        self.loadErrors[index] = error
+        self.loadingTasks.removeValue(forKey: index)
+        completion(.failure(error))
       }
+    }
+    loadingTasks[index] = task
+  }
 
-      // Show loading indicator
-      showLoading()
+  private func updateCachedController(at index: Int, with image: UIImage) {
+    guard let controller = cachedPageControllers[index] else { return }
+    controller.updateImage(image)
 
-      // Start async loading
-      let task = Task { @MainActor in
-        do {
-          let image = try await loader()
-          self.loadedImages[index] = image
-          self.hideLoading()
-          completion(.success(image))
-        } catch {
-          self.loadErrors[index] = error
-          self.hideLoading()
-          completion(.failure(error))
-        }
+    // If this is the current page, ensure it's displayed
+    if index == currentIndex {
+      // Force refresh
+      if let pageVC = pageViewController {
+        pageVC.setViewControllers([controller], direction: .forward, animated: false)
       }
-      loadingTasks[index] = task
     }
   }
 
@@ -294,11 +325,11 @@ final class ImageViewerController: UIViewController {
 
   private func preloadAdjacentImages() {
     let indicesToPreload = [currentIndex - 1, currentIndex + 1].filter {
-      $0 >= 0 && $0 < imageSources.count
+      $0 >= 0 && $0 < imageSources.count && loadedImages[$0] == nil
     }
 
     for index in indicesToPreload {
-      loadImage(at: index) { _ in }
+      loadImageAsync(at: index) { _ in }
     }
   }
 
@@ -312,8 +343,11 @@ final class ImageViewerController: UIViewController {
     overlayHostingController?.view.removeFromSuperview()
     overlayHostingController?.removeFromParent()
     overlayContainerView?.removeFromSuperview()
+    closeButtonHostingController?.willMove(toParent: nil)
+    closeButtonHostingController?.view.removeFromSuperview()
+    closeButtonHostingController?.removeFromParent()
 
-    // Create overlay content
+    // Create overlay content (without close button)
     let context = ImageViewerContext(
       currentIndex: currentIndex,
       totalCount: imageSources.count,
@@ -324,7 +358,6 @@ final class ImageViewerController: UIViewController {
       context: context,
       showPageIndicator: imageSources.count > 1,
       overlay: overlayBuilder,
-      closeButton: closeButtonBuilder,
       pageIndicator: pageIndicatorBuilder
     )
 
@@ -356,6 +389,35 @@ final class ImageViewerController: UIViewController {
     hostingController.didMove(toParent: self)
     overlayHostingController = hostingController
     overlayContainerView = containerView
+
+    // Add close button separately (outside of PassthroughContainerView)
+    let closeButtonView = closeButtonBuilder { [weak self] in self?.dismiss() }
+      .padding(8)
+      .padding(.top, safeAreaTop)
+
+    let closeButtonController = UIHostingController(rootView: AnyView(closeButtonView))
+    closeButtonController.view.backgroundColor = .clear
+    closeButtonController.view.translatesAutoresizingMaskIntoConstraints = false
+
+    addChild(closeButtonController)
+    view.addSubview(closeButtonController.view)
+
+    NSLayoutConstraint.activate([
+      closeButtonController.view.topAnchor.constraint(equalTo: view.topAnchor),
+      closeButtonController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+    ])
+
+    closeButtonController.didMove(toParent: self)
+    closeButtonHostingController = closeButtonController
+  }
+
+  private var safeAreaTop: CGFloat {
+    UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .first?
+      .windows
+      .first?
+      .safeAreaInsets.top ?? 0
   }
 
   // MARK: - Appear Animation
@@ -435,7 +497,9 @@ final class ImageViewerController: UIViewController {
     isOverlayVisible.toggle()
 
     UIView.animate(withDuration: 0.2) {
-      self.overlayContainerView?.alpha = self.isOverlayVisible ? 1 : 0
+      let alpha: CGFloat = self.isOverlayVisible ? 1 : 0
+      self.overlayContainerView?.alpha = alpha
+      self.closeButtonHostingController?.view.alpha = alpha
     }
   }
 
@@ -486,38 +550,44 @@ final class ImageViewerController: UIViewController {
   private func makePageController(for index: Int) -> ZoomableImageViewController? {
     guard index >= 0, index < imageSources.count else { return nil }
 
-    // Check if image is loaded
-    guard let image = loadedImages[index] else {
-      // Load image asynchronously
-      loadImage(at: index) { [weak self] result in
-        // Reload page when image is loaded
-        if case .success = result {
-          self?.reloadCurrentPage()
-        }
+    // Return cached controller if available and has correct image
+    if let cached = cachedPageControllers[index] {
+      // If image is now loaded but controller has placeholder, update it
+      if let image = loadedImages[index], cached.currentImage !== image {
+        cached.updateImage(image)
       }
+      return cached
+    }
 
-      // Return placeholder controller if available
-      if let placeholder = imageSources[index].placeholder {
-        let controller = ZoomableImageViewController(image: placeholder, configuration: configuration)
-        controller.pageIndex = index
-        controller.delegate = self
-        return controller
-      }
-      return nil
+    // Create new controller
+    let image: UIImage
+    if let loadedImage = loadedImages[index] {
+      image = loadedImage
+    } else {
+      // Use placeholder or create temporary one
+      image = imageSources[index].placeholder ?? createTemporaryPlaceholder()
+
+      // Start loading async image
+      loadImageAsync(at: index) { _ in }
     }
 
     let controller = ZoomableImageViewController(image: image, configuration: configuration)
     controller.pageIndex = index
     controller.delegate = self
+
+    // Cache the controller
+    cachedPageControllers[index] = controller
+
     return controller
   }
 
-  private func reloadCurrentPage() {
-    guard let pageVC = pageViewController,
-          let currentController = makePageController(for: currentIndex)
-    else { return }
-
-    pageVC.setViewControllers([currentController], direction: .forward, animated: false)
+  private func createTemporaryPlaceholder() -> UIImage {
+    // Create a 1x1 transparent image as temporary placeholder
+    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
+    return renderer.image { context in
+      UIColor.clear.setFill()
+      context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+    }
   }
 
   // MARK: - Page View Controller Gestures
@@ -646,6 +716,9 @@ extension ImageViewerController: UIPageViewControllerDelegate {
     if oldIndex != currentIndex {
       configuration.onPageChange?(currentIndex)
       updateOverlay()
+
+      // Preload adjacent images for smooth scrolling
+      preloadAdjacentImages()
     }
   }
 }
@@ -754,37 +827,53 @@ private final class PassthroughContainerView: UIView {
   weak var hostedView: UIView?
 
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    // Skip hit testing if container is hidden (alpha near zero)
+    if alpha < 0.01 {
+      return nil
+    }
+
     // Get the hit view from the hosted SwiftUI view
     guard let hostedView = hostedView else { return nil }
 
     let hitView = hostedView.hitTest(convert(point, to: hostedView), with: event)
 
-    // If the hit view is the hosting view itself or a generic container,
-    // pass the touch through to views behind
-    if hitView == nil || hitView == hostedView || isPassthroughView(hitView) {
+    // If nothing was hit or only the hosting view itself was hit, pass through
+    if hitView == nil || hitView == hostedView {
       return nil
     }
 
-    return hitView
-  }
-
-  private func isPassthroughView(_ view: UIView?) -> Bool {
-    guard let view = view else { return true }
-
-    let className = String(describing: type(of: view))
-
-    // Pass through for SwiftUI internal container views
-    if className.hasPrefix("_") || className.contains("HostingView") {
-      // But not if it has gesture recognizers (interactive)
-      if let gestures = view.gestureRecognizers, !gestures.isEmpty {
-        return false
-      }
-      return true
+    // Check if the hit view contains a SwiftUI Button by examining view hierarchy
+    if containsSwiftUIButton(hitView, in: hostedView) {
+      return hostedView
     }
 
-    // Pass through for plain UIView containers
-    if type(of: view) == UIView.self {
-      return true
+    // Pass through for non-interactive views
+    return nil
+  }
+
+  private func containsSwiftUIButton(_ view: UIView?, in hostingView: UIView) -> Bool {
+    guard let view = view else { return false }
+
+    var current: UIView? = view
+    while let v = current, v != hostingView {
+      let className = String(describing: type(of: v))
+
+      // SwiftUI Button uses internal views with "Button" in the name
+      if className.contains("Button") {
+        return true
+      }
+
+      // Check for gesture recognizers (for custom interactive views)
+      if let gestures = v.gestureRecognizers, !gestures.isEmpty {
+        return true
+      }
+
+      // Check for UIControl subclasses
+      if v is UIControl {
+        return true
+      }
+
+      current = v.superview
     }
 
     return false
@@ -797,18 +886,11 @@ private struct OverlayContainerView: View {
   let context: ImageViewerContext
   let showPageIndicator: Bool
   let overlay: (ImageViewerContext) -> AnyView
-  let closeButton: (@escaping () -> Void) -> AnyView
   let pageIndicator: (Int, Int) -> AnyView
 
   var body: some View {
     Color.clear
       .allowsHitTesting(false)
-      .overlay(alignment: .topLeading) {
-        // Close button (positioned at top-left, interactive)
-        closeButton(context.dismiss)
-          .padding(8)
-          .padding(.top, safeAreaTop)
-      }
       .overlay {
         // Custom overlay (pass through touches)
         overlay(context)
@@ -822,15 +904,6 @@ private struct OverlayContainerView: View {
             .allowsHitTesting(false)
         }
       }
-  }
-
-  private var safeAreaTop: CGFloat {
-    UIApplication.shared.connectedScenes
-      .compactMap { $0 as? UIWindowScene }
-      .first?
-      .windows
-      .first?
-      .safeAreaInsets.top ?? 0
   }
 }
 
