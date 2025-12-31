@@ -529,6 +529,7 @@ final class ImageViewerController: UIViewController {
 
     // Hide overlay
     overlayHostingController?.view.alpha = 0
+    closeButtonHostingController?.view.alpha = 0
   }
 
   private func getCurrentImage() -> UIImage? {
@@ -642,6 +643,7 @@ final class ImageViewerController: UIViewController {
       transitionState = .interactive(progress: progress, translation: translation)
       transitionAnimator?.updateInteractiveTransition(progress: progress, translation: translation)
       overlayHostingController?.view.alpha = 1 - progress
+      closeButtonHostingController?.view.alpha = 1 - progress
 
     case .ended, .cancelled:
       let shouldDismiss = abs(translation.y) > configuration.dismissThreshold
@@ -650,6 +652,7 @@ final class ImageViewerController: UIViewController {
       if shouldDismiss {
         transitionState = .dismissing
         overlayHostingController?.view.alpha = 0
+        closeButtonHostingController?.view.alpha = 0
         transitionAnimator?.completeInteractiveDismiss { [weak self] in
           self?.configuration.onDismiss?()
           self?.onDismiss?()
@@ -660,6 +663,7 @@ final class ImageViewerController: UIViewController {
           self?.transitionImageView?.isHidden = true
           self?.pageViewController?.view.isHidden = false
           self?.overlayHostingController?.view.alpha = 1
+          self?.closeButtonHostingController?.view.alpha = 1
         }
       }
 
@@ -793,11 +797,13 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
 
     // Fade overlay
     overlayHostingController?.view.alpha = 1 - progress
+    closeButtonHostingController?.view.alpha = 1 - progress
   }
 
   func zoomableImageViewControllerDidRequestDismiss(_ controller: ZoomableImageViewController) {
     transitionState = .dismissing
     overlayHostingController?.view.alpha = 0
+    closeButtonHostingController?.view.alpha = 0
 
     transitionAnimator?.completeInteractiveDismiss { [weak self] in
       self?.configuration.onDismiss?()
@@ -812,6 +818,7 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
       self?.singleImageController?.view.isHidden = false
       self?.pageViewController?.view.isHidden = false
       self?.overlayHostingController?.view.alpha = 1
+      self?.closeButtonHostingController?.view.alpha = 1
     }
   }
 
