@@ -11,6 +11,7 @@ protocol ZoomableImageViewControllerDelegate: AnyObject {
   )
   func zoomableImageViewControllerDidRequestDismiss(_ controller: ZoomableImageViewController)
   func zoomableImageViewControllerDidCancelDismiss(_ controller: ZoomableImageViewController)
+  func zoomableImageViewControllerDidSingleTap(_ controller: ZoomableImageViewController)
 }
 
 // MARK: - Zoomable Image View Controller
@@ -36,6 +37,13 @@ final class ZoomableImageViewController: UIViewController {
   private var hasInitializedZoomScale = false
 
   // MARK: - Gesture Recognizers
+
+  private lazy var singleTapGesture: UITapGestureRecognizer = {
+    let gesture = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
+    gesture.numberOfTapsRequired = 1
+    gesture.require(toFail: doubleTapGesture)
+    return gesture
+  }()
 
   private lazy var doubleTapGesture: UITapGestureRecognizer = {
     let gesture = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
@@ -118,6 +126,7 @@ final class ZoomableImageViewController: UIViewController {
   }
 
   private func setupGestures() {
+    scrollView.addGestureRecognizer(singleTapGesture)
     scrollView.addGestureRecognizer(doubleTapGesture)
 
     if enableDismissGesture {
@@ -170,6 +179,12 @@ final class ZoomableImageViewController: UIViewController {
       bottom: verticalPadding,
       right: horizontalPadding
     )
+  }
+
+  // MARK: - Single Tap
+
+  @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+    delegate?.zoomableImageViewControllerDidSingleTap(self)
   }
 
   // MARK: - Double Tap

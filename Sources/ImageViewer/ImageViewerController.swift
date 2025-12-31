@@ -31,6 +31,7 @@ final class ImageViewerController: UIViewController {
   private var overlayContainerView: PassthroughContainerView?
   private var transitionImageView: UIImageView?
   private var transitionAnimator: ImageViewerTransitionAnimator?
+  private var isOverlayVisible: Bool = true
 
   // MARK: - Loading State
 
@@ -430,6 +431,14 @@ final class ImageViewerController: UIViewController {
     }
   }
 
+  private func toggleOverlayVisibility() {
+    isOverlayVisible.toggle()
+
+    UIView.animate(withDuration: 0.2) {
+      self.overlayContainerView?.alpha = self.isOverlayVisible ? 1 : 0
+    }
+  }
+
   private func prepareForDismissAnimation() {
     // Hide content controllers
     singleImageController?.view.isHidden = true
@@ -731,6 +740,10 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
       self?.pageViewController?.view.isHidden = false
       self?.overlayHostingController?.view.alpha = 1
     }
+  }
+
+  func zoomableImageViewControllerDidSingleTap(_ controller: ZoomableImageViewController) {
+    toggleOverlayVisibility()
   }
 }
 
