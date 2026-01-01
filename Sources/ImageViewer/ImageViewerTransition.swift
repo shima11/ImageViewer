@@ -116,21 +116,32 @@ final class ImageViewerTransitionAnimator {
       currentAnimator = animator
       animator.startAnimation()
     } else {
-      // No source frame - fade in
-      imageView.frame = finalFrame
+      // No source frame - slide up from bottom with fade in
+      let startFrame = CGRect(
+        x: finalFrame.origin.x,
+        y: containerView.bounds.height,
+        width: finalFrame.width,
+        height: finalFrame.height
+      )
+      imageView.frame = startFrame
       imageView.alpha = 0
       backgroundView.alpha = 0
 
-      UIView.animate(
-        withDuration: 0.25,
-        delay: 0,
-        options: .curveEaseOut
+      let animator = UIViewPropertyAnimator(
+        duration: 0.35,
+        dampingRatio: 0.85
       ) {
+        imageView.frame = self.finalFrame
         imageView.alpha = 1
         backgroundView.alpha = 1
-      } completion: { _ in
+      }
+
+      animator.addCompletion { _ in
         completion()
       }
+
+      currentAnimator = animator
+      animator.startAnimation()
     }
   }
 
@@ -138,7 +149,8 @@ final class ImageViewerTransitionAnimator {
 
   func performDismissAnimation(completion: @escaping () -> Void) {
     guard let imageView = imageView,
-          let backgroundView = backgroundView
+          let backgroundView = backgroundView,
+          let containerView = containerView
     else {
       completion()
       return
@@ -165,17 +177,29 @@ final class ImageViewerTransitionAnimator {
       currentAnimator = animator
       animator.startAnimation()
     } else {
-      // No source frame - fade out
-      UIView.animate(
-        withDuration: 0.25,
-        delay: 0,
-        options: .curveEaseOut
+      // No source frame - slide down to bottom with fade out
+      let dismissFrame = CGRect(
+        x: finalFrame.origin.x,
+        y: containerView.bounds.height,
+        width: finalFrame.width,
+        height: finalFrame.height
+      )
+
+      let animator = UIViewPropertyAnimator(
+        duration: 0.35,
+        dampingRatio: 0.85
       ) {
+        imageView.frame = dismissFrame
         imageView.alpha = 0
         backgroundView.alpha = 0
-      } completion: { _ in
+      }
+
+      animator.addCompletion { _ in
         completion()
       }
+
+      currentAnimator = animator
+      animator.startAnimation()
     }
   }
 
