@@ -139,11 +139,11 @@ final class WindowCoverManager {
 // MARK: - Dismiss Environment
 
 /// An action that dismisses the window cover.
-public struct WindowCoverDismissAction: Sendable {
+struct WindowCoverDismissAction: Sendable {
   let action: @Sendable @MainActor () -> Void
 
   @MainActor
-  public func callAsFunction() {
+  func callAsFunction() {
     action()
   }
 }
@@ -154,7 +154,7 @@ private struct WindowCoverDismissKey: EnvironmentKey {
 
 extension EnvironmentValues {
   /// An action that dismisses the current window cover.
-  public var windowCoverDismiss: WindowCoverDismissAction {
+  var windowCoverDismiss: WindowCoverDismissAction {
     get { self[WindowCoverDismissKey.self] }
     set { self[WindowCoverDismissKey.self] = newValue }
   }
