@@ -8,24 +8,12 @@ import SwiftUI
 
 // MARK: - Gallery Previews
 
-#Preview("Gallery Grid") {
-  GalleryGridPreview()
-}
-
 #Preview("Gallery with Captions") {
   GalleryWithCaptionsPreview()
 }
 
-#Preview("Text Page Indicator") {
-  TextPageIndicatorPreview()
-}
-
 #Preview("Custom UI") {
   CustomUIPreview()
-}
-
-#Preview("Empty Gallery") {
-  EmptyGalleryPreview()
 }
 
 #Preview("Fill Mode Transition") {
@@ -87,61 +75,6 @@ private struct SingleImageWithOverlayPreview: View {
 }
 
 // MARK: - Gallery Preview Views
-
-private struct GalleryGridPreview: View {
-  @State private var isPresented = false
-  @State private var selectedIndex = 0
-  @State private var sourceFrames: [CGRect] = Array(repeating: .zero, count: 6)
-
-  private let images = PreviewImageGenerator.sampleImages
-  private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
-
-  var body: some View {
-    NavigationStack {
-      ScrollView {
-        Text("Tap any image to open gallery")
-          .foregroundStyle(.secondary)
-          .padding()
-
-        LazyVGrid(columns: columns, spacing: 8) {
-          ForEach(Array(images.enumerated()), id: \.offset) { index, image in
-            Image(uiImage: image)
-              .resizable()
-              .aspectRatio(contentMode: .fill)
-              .frame(height: 120)
-              .clipped()
-              .clipShape(RoundedRectangle(cornerRadius: 8))
-              .contentShape(Rectangle())
-              .opacity(isPresented && selectedIndex == index ? 0 : 1)
-              .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                if index < sourceFrames.count {
-                  sourceFrames[index] = frame
-                }
-              }
-              .onTapGesture {
-                selectedIndex = index
-                isPresented = true
-              }
-          }
-        }
-        .padding(.horizontal)
-      }
-      .navigationTitle("Photo Gallery")
-      .imageViewer(
-        isPresented: $isPresented,
-        images: images,
-        initialIndex: selectedIndex,
-        sourceFrames: sourceFrames,
-        sourceContentMode: .fill,
-        configuration: ImageViewerConfiguration(
-          onPageChange: { newIndex in
-            selectedIndex = newIndex
-          }
-        )
-      )
-    }
-  }
-}
 
 private struct GalleryWithCaptionsPreview: View {
   @State private var isPresented = false
@@ -220,49 +153,6 @@ private struct GalleryWithCaptionsPreview: View {
             )
         }
       }
-    }
-  }
-}
-
-private struct TextPageIndicatorPreview: View {
-  @State private var isPresented = false
-  @State private var selectedIndex = 0
-
-  private let images = PreviewImageGenerator.sampleImages
-
-  var body: some View {
-    NavigationStack {
-      VStack {
-        Text("Text style page indicator")
-          .foregroundStyle(.secondary)
-          .padding()
-
-        Button("Open Gallery") {
-          isPresented = true
-        }
-        .buttonStyle(.borderedProminent)
-
-        Spacer()
-      }
-      .navigationTitle("Text Indicator")
-      .imageViewer(
-        isPresented: $isPresented,
-        sources: images.map { .image($0) },
-        initialIndex: selectedIndex,
-        overlay: { _ in EmptyView() },
-        closeButton: { DefaultCloseButton(dismiss: $0) },
-        pageIndicator: { currentIndex, totalCount in
-          // Custom text-style page indicator
-          Text("\(currentIndex + 1) / \(totalCount)")
-            .font(.subheadline.monospacedDigit())
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.black.opacity(0.5), in: Capsule())
-        },
-        loadingContent: { DefaultLoadingView() },
-        errorContent: { DefaultErrorView(error: $0) }
-      )
     }
   }
 }
@@ -368,33 +258,6 @@ private struct CustomUIPreview: View {
           }
           .padding()
         }
-      )
-    }
-  }
-}
-
-private struct EmptyGalleryPreview: View {
-  @State private var isPresented = false
-
-  var body: some View {
-    NavigationStack {
-      VStack {
-        Text("Empty gallery handling")
-          .foregroundStyle(.secondary)
-          .padding()
-
-        Button("Open Empty Gallery") {
-          isPresented = true
-        }
-        .buttonStyle(.borderedProminent)
-
-        Spacer()
-      }
-      .navigationTitle("Empty Gallery")
-      .imageViewer(
-        isPresented: $isPresented,
-        images: [],
-        initialIndex: 0
       )
     }
   }
