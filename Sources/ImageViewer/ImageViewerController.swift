@@ -531,8 +531,10 @@ final class ImageViewerController: UIViewController {
   }
 
   private func updateOverlayAlpha(_ alpha: CGFloat) {
-    overlayHostingController?.view.alpha = alpha
-    closeButtonHostingController?.view.alpha = alpha
+    // Respect isOverlayVisible state - don't show if user has hidden the overlay
+    let effectiveAlpha = isOverlayVisible ? alpha : 0
+    overlayHostingController?.view.alpha = effectiveAlpha
+    closeButtonHostingController?.view.alpha = effectiveAlpha
   }
 
   private func prepareTransitionForInteractiveDismiss() {
