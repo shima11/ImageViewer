@@ -52,7 +52,7 @@ struct ContentView: View {
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: 200, height: 150)
-            .readFrame { sourceFrame = $0 }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sourceFrame = $0 }
             .onTapGesture { isPresented = true }
             .imageViewer(
                 isPresented: $isPresented,
@@ -81,7 +81,7 @@ struct GalleryView: View {
                     .frame(height: 120)
                     .clipped()
                     .opacity(isPresented && selectedIndex == index ? 0 : 1)
-                    .readFrame { sourceFrames[index] = $0 }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sourceFrames[index] = $0 }
                     .onTapGesture {
                         selectedIndex = index
                         isPresented = true
