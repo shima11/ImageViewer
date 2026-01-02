@@ -29,6 +29,11 @@ final class ImageViewerTransitionAnimator {
   private var finalFrame: CGRect = .zero
   private var currentAnimator: UIViewPropertyAnimator?
 
+  /// Whether to use reduced motion animations
+  private var reduceMotion: Bool {
+    UIAccessibility.isReduceMotionEnabled
+  }
+
   // MARK: - Init
 
   init(
@@ -86,6 +91,22 @@ final class ImageViewerTransitionAnimator {
     }
 
     finalFrame = calculateFinalFrame(in: containerView.bounds)
+
+    // Use simple fade for reduced motion
+    if reduceMotion {
+      imageView.frame = finalFrame
+      imageView.alpha = 0
+      imageView.contentMode = .scaleAspectFit
+      backgroundView.alpha = 0
+
+      UIView.animate(withDuration: 0.2) {
+        imageView.alpha = 1
+        backgroundView.alpha = 1
+      } completion: { _ in
+        completion()
+      }
+      return
+    }
 
     if let sourceFrame = sourceFrame {
       // Start from source frame
@@ -153,6 +174,17 @@ final class ImageViewerTransitionAnimator {
           let containerView = containerView
     else {
       completion()
+      return
+    }
+
+    // Use simple fade for reduced motion
+    if reduceMotion {
+      UIView.animate(withDuration: 0.2) {
+        imageView.alpha = 0
+        backgroundView.alpha = 0
+      } completion: { _ in
+        completion()
+      }
       return
     }
 
@@ -259,6 +291,18 @@ final class ImageViewerTransitionAnimator {
 
     if finalFrame == .zero {
       finalFrame = calculateFinalFrame(in: containerView.bounds)
+    }
+
+    // Use simple fade for reduced motion
+    if reduceMotion {
+      UIView.animate(withDuration: 0.15) {
+        imageView.frame = self.finalFrame
+        imageView.alpha = 1
+        backgroundView.alpha = 1
+      } completion: { _ in
+        completion?()
+      }
+      return
     }
 
     let animator = UIViewPropertyAnimator(

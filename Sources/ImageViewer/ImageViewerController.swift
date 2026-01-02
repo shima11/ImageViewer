@@ -487,10 +487,17 @@ final class ImageViewerController: UIViewController {
   private func toggleOverlayVisibility() {
     isOverlayVisible.toggle()
 
-    UIView.animate(withDuration: 0.2) {
-      let alpha: CGFloat = self.isOverlayVisible ? 1 : 0
-      self.overlayContainerView?.alpha = alpha
-      self.closeButtonHostingController?.view.alpha = alpha
+    let alpha: CGFloat = isOverlayVisible ? 1 : 0
+
+    if UIAccessibility.isReduceMotionEnabled {
+      // Instant change for reduced motion
+      overlayContainerView?.alpha = alpha
+      closeButtonHostingController?.view.alpha = alpha
+    } else {
+      UIView.animate(withDuration: 0.2) {
+        self.overlayContainerView?.alpha = alpha
+        self.closeButtonHostingController?.view.alpha = alpha
+      }
     }
   }
 
