@@ -177,6 +177,11 @@ final class ImageViewerTransitionAnimator {
       return
     }
 
+    // Ensure finalFrame is calculated
+    if finalFrame == .zero {
+      finalFrame = calculateFinalFrame(in: containerView.bounds)
+    }
+
     // Use simple fade for reduced motion
     if reduceMotion {
       UIView.animate(withDuration: 0.2) {
