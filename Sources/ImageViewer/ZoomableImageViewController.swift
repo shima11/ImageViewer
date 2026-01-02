@@ -110,7 +110,7 @@ final class ZoomableImageViewController: UIViewController {
       hasInitializedZoomScale = true
     } else {
       // Update min/max scales but preserve current zoom
-      updateZoomScaleLimits(for: view.bounds.size)
+      updateZoomScaleForSize(view.bounds.size, resetToMinimum: false)
     }
     centerImageInScrollView()
   }
@@ -165,7 +165,7 @@ final class ZoomableImageViewController: UIViewController {
 
   // MARK: - Zoom Scale
 
-  private func updateZoomScaleForSize(_ size: CGSize) {
+  private func updateZoomScaleForSize(_ size: CGSize, resetToMinimum: Bool = true) {
     guard currentImage.size.width > 0, currentImage.size.height > 0 else { return }
 
     let widthScale = size.width / currentImage.size.width
@@ -174,18 +174,10 @@ final class ZoomableImageViewController: UIViewController {
 
     scrollView.minimumZoomScale = minZoomScale
     scrollView.maximumZoomScale = minZoomScale * configuration.maxScale
-    scrollView.zoomScale = minZoomScale
-  }
 
-  private func updateZoomScaleLimits(for size: CGSize) {
-    guard currentImage.size.width > 0, currentImage.size.height > 0 else { return }
-
-    let widthScale = size.width / currentImage.size.width
-    let heightScale = size.height / currentImage.size.height
-    let minZoomScale = min(widthScale, heightScale)
-
-    scrollView.minimumZoomScale = minZoomScale
-    scrollView.maximumZoomScale = minZoomScale * configuration.maxScale
+    if resetToMinimum {
+      scrollView.zoomScale = minZoomScale
+    }
   }
 
   private func centerImageInScrollView() {

@@ -57,8 +57,8 @@ private struct SingleImageWithOverlayPreview: View {
       .navigationTitle("With Overlay")
       .imageViewer(
         isPresented: $isPresented,
-        source: .image(sampleImage),
-        sourceFrame: sourceFrame
+        sources: [.image(sampleImage)],
+        sourceFrames: [sourceFrame]
       ) { context in
         VStack {
           Spacer()

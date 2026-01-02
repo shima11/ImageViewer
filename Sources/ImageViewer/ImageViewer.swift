@@ -365,45 +365,6 @@ extension View {
     )
   }
 
-  // MARK: - Single ImageSource Convenience
-
-  /// Presents an image viewer for a single ImageSource.
-  public func imageViewer(
-    isPresented: Binding<Bool>,
-    source: ImageSource,
-    sourceFrame: CGRect? = nil,
-    sourceContentMode: ContentMode = .fit,
-    configuration: ImageViewerConfiguration = .default
-  ) -> some View {
-    imageViewer(
-      isPresented: isPresented,
-      sources: [source],
-      initialIndex: 0,
-      sourceFrames: sourceFrame.map { [$0] },
-      sourceContentMode: sourceContentMode,
-      configuration: configuration
-    )
-  }
-
-  /// Presents an image viewer for a single ImageSource with custom overlay.
-  public func imageViewer<Overlay: View>(
-    isPresented: Binding<Bool>,
-    source: ImageSource,
-    sourceFrame: CGRect? = nil,
-    sourceContentMode: ContentMode = .fit,
-    configuration: ImageViewerConfiguration = .default,
-    @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay
-  ) -> some View {
-    imageViewer(
-      isPresented: isPresented,
-      sources: [source],
-      initialIndex: 0,
-      sourceFrames: sourceFrame.map { [$0] },
-      sourceContentMode: sourceContentMode,
-      configuration: configuration,
-      overlay: overlay
-    )
-  }
 }
 
 // MARK: - View Modifier

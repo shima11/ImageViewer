@@ -264,23 +264,7 @@ final class ImageViewerController: UIViewController {
   }
 
   private func setupSingleImageViewer(with image: UIImage) {
-    // Create transition image view for animation
-    let transitionImageView = UIImageView(image: image)
-    transitionImageView.contentMode = .scaleAspectFit
-    transitionImageView.clipsToBounds = true
-    view.addSubview(transitionImageView)
-    self.transitionImageView = transitionImageView
-
-    // Create transition animator
-    transitionAnimator = ImageViewerTransitionAnimator(
-      imageView: transitionImageView,
-      containerView: view,
-      backgroundView: backgroundView,
-      image: image,
-      sourceFrame: getSourceFrame(for: 0),
-      sourceContentMode: sourceContentMode,
-      configuration: configuration
-    )
+    setupTransitionViews(with: image, sourceIndex: 0)
 
     // Create zoomable controller (will be shown after transition)
     let controller = ZoomableImageViewController(image: image, configuration: configuration)
@@ -289,23 +273,7 @@ final class ImageViewerController: UIViewController {
   }
 
   private func setupMultipleImagesViewer(initialImage: UIImage) {
-    // Create transition image view for animation
-    let transitionImageView = UIImageView(image: initialImage)
-    transitionImageView.contentMode = .scaleAspectFit
-    transitionImageView.clipsToBounds = true
-    view.addSubview(transitionImageView)
-    self.transitionImageView = transitionImageView
-
-    // Create transition animator
-    transitionAnimator = ImageViewerTransitionAnimator(
-      imageView: transitionImageView,
-      containerView: view,
-      backgroundView: backgroundView,
-      image: initialImage,
-      sourceFrame: getSourceFrame(for: currentIndex),
-      sourceContentMode: sourceContentMode,
-      configuration: configuration
-    )
+    setupTransitionViews(with: initialImage, sourceIndex: currentIndex)
 
     // Create page view controller (will be shown after transition)
     let pageVC = UIPageViewController(
@@ -321,6 +289,26 @@ final class ImageViewerController: UIViewController {
     preloadAdjacentImages()
   }
 
+  private func setupTransitionViews(with image: UIImage, sourceIndex: Int) {
+    // Create transition image view for animation
+    let transitionImageView = UIImageView(image: image)
+    transitionImageView.contentMode = .scaleAspectFit
+    transitionImageView.clipsToBounds = true
+    view.addSubview(transitionImageView)
+    self.transitionImageView = transitionImageView
+
+    // Create transition animator
+    transitionAnimator = ImageViewerTransitionAnimator(
+      imageView: transitionImageView,
+      containerView: view,
+      backgroundView: backgroundView,
+      image: image,
+      sourceFrame: getSourceFrame(for: sourceIndex),
+      sourceContentMode: sourceContentMode,
+      configuration: configuration
+    )
+  }
+
   private func preloadAdjacentImages() {
     let indicesToPreload = [currentIndex - 1, currentIndex + 1].filter {
       $0 >= 0 && $0 < imageSources.count && loadedImages[$0] == nil
@@ -328,6 +316,18 @@ final class ImageViewerController: UIViewController {
 
     for index in indicesToPreload {
       loadImageAsync(at: index) { _ in }
+    }
+
+    // Clean up cached controllers that are far from current index
+    cleanupDistantCachedControllers()
+  }
+
+  /// Remove cached controllers that are more than 2 pages away from current index
+  private func cleanupDistantCachedControllers() {
+    let keepRange = (currentIndex - 2)...(currentIndex + 2)
+    let keysToRemove = cachedPageControllers.keys.filter { !keepRange.contains($0) }
+    for key in keysToRemove {
+      cachedPageControllers.removeValue(forKey: key)
     }
   }
 
@@ -592,7 +592,7 @@ final class ImageViewerController: UIViewController {
       image = loadedImage
     } else {
       // Use placeholder or create temporary one
-      image = imageSources[index].placeholder ?? createTemporaryPlaceholder()
+      image = imageSources[index].placeholder ?? Self.transparentPlaceholder
 
       // Start loading async image
       loadImageAsync(at: index) { _ in }
@@ -608,14 +608,14 @@ final class ImageViewerController: UIViewController {
     return controller
   }
 
-  private func createTemporaryPlaceholder() -> UIImage {
-    // Create a 1x1 transparent image as temporary placeholder
+  /// Shared 1x1 transparent placeholder image
+  private static let transparentPlaceholder: UIImage = {
     let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
     return renderer.image { context in
       UIColor.clear.setFill()
       context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
     }
-  }
+  }()
 
   // MARK: - Cleanup
 
