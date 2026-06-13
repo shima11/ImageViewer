@@ -109,8 +109,10 @@ final class ZoomableImageViewController: UIViewController {
       updateZoomScaleForSize(view.bounds.size)
       hasInitializedZoomScale = true
     } else {
-      // Update min/max scales but preserve current zoom
-      updateZoomScaleForSize(view.bounds.size, resetToMinimum: false)
+      // Preserve the user's zoom when zoomed in, but re-fit when the image was
+      // at minimum scale (e.g. after rotation the minimum scale changes).
+      let wasAtMinimum = isAtMinimumZoom
+      updateZoomScaleForSize(view.bounds.size, resetToMinimum: wasAtMinimum)
     }
     centerImageInScrollView()
   }

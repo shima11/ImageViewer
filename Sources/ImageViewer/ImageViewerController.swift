@@ -105,6 +105,26 @@ final class ImageViewerController: UIViewController {
     return true
   }
 
+  override func viewWillTransition(
+    to size: CGSize,
+    with coordinator: UIViewControllerTransitionCoordinator
+  ) {
+    super.viewWillTransition(to: size, with: coordinator)
+
+    // While a dismiss/interactive transition is running, let it finish so its
+    // completion (onDismiss) fires; interrupting it would strand the viewer.
+    switch transitionState {
+    case .dismissing, .interactive:
+      return
+    case .appearing, .presented:
+      coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+        // Recompute the transition frame for the new orientation. The zoomable
+        // controllers re-layout themselves via viewDidLayoutSubviews.
+        self?.transitionAnimator?.handleRotation()
+      }
+    }
+  }
+
   // MARK: - Setup
 
   private func setupBackground() {
