@@ -18,9 +18,11 @@ A SwiftUI image viewer with smooth zoom transitions, gesture-based navigation, a
 
 ## Requirements
 
-- iOS 17.0+
+- iOS 17.0+ (deployment target)
 - Swift 6.0+
-- Xcode 16.0+
+- Xcode 26.0+ to build (the default UI adopts the iOS 26 Liquid Glass APIs, which require the iOS 26 SDK; the styling falls back automatically at runtime on iOS 17–25)
+
+> **Platform:** iOS only. The viewer presents in a dedicated `UIWindow` and adopts UIKit/Liquid Glass APIs whose semantics differ on visionOS, so visionOS is not supported.
 
 ## Installation
 
@@ -278,6 +280,10 @@ When an `.async` / `.url` load fails, the error view is shown. **Tapping the err
 - Pre-loaded `.image` sources are held for the lifetime of the viewer (the caller already owns these images).
 - `.async` images more than two pages away from the current index are released and re-fetched when revisited, so large galleries do not grow memory unbounded.
 - Very large images are drawn at full size without tiling; provide appropriately sized images for memory-constrained scenarios.
+
+## Rotation
+
+The zoom transition animates between the source thumbnail frame and fullscreen. Source frames are captured in the presenting view's coordinate space when the viewer is presented, so after a device rotation they no longer match the on-screen layout. To avoid animating to a stale position, **dismissal after a rotation falls back to a slide-down animation** instead of returning to the thumbnail.
 
 ## License
 
