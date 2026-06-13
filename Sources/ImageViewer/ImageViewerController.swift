@@ -290,21 +290,19 @@ final class ImageViewerController: UIViewController {
   }
 
   private func showError(_ error: Error) {
-    let errorView = errorContentBuilder(error)
-    let hostingController = UIHostingController(rootView: errorView)
+    // Inject a retry action so the error view (default or custom) can trigger a
+    // reload via @Environment(\.imageViewerRetry). The viewer itself adds no
+    // tap gesture, so custom error views keep full control of their hit testing.
+    let index = currentIndex
+    let retry = ImageViewerRetryAction(action: { [weak self] in self?.retryLoad(at: index) })
+    let errorView = errorContentBuilder(error).environment(\.imageViewerRetry, retry)
+
+    let hostingController = UIHostingController(rootView: AnyView(errorView))
     addChild(hostingController)
     view.addSubview(hostingController.view)
     hostingController.view.backgroundColor = .clear
     hostingController.view.translatesAutoresizingMaskIntoConstraints = false
     hostingController.view.tag = errorViewTag
-
-    // Tap the error view to retry loading. Do not cancel touches so buttons in a
-    // custom errorContent still receive taps (a redundant retry is a no-op once
-    // the cached error is cleared).
-    let tap = UITapGestureRecognizer(target: self, action: #selector(handleErrorTap))
-    tap.cancelsTouchesInView = false
-    hostingController.view.addGestureRecognizer(tap)
-    hostingController.view.isUserInteractionEnabled = true
 
     NSLayoutConstraint.activate([
       hostingController.view.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -317,10 +315,6 @@ final class ImageViewerController: UIViewController {
 
   private func hideError() {
     view.viewWithTag(errorViewTag)?.removeFromSuperview()
-  }
-
-  @objc private func handleErrorTap() {
-    retryLoad(at: currentIndex)
   }
 
   /// Clears the cached error for the index and retries loading it.
