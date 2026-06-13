@@ -254,7 +254,18 @@ ImageSource.async({ try await fetchImage() }, placeholder: thumbnailImage)
 ImageSource.url(url, placeholder: thumbnailImage)
 ```
 
-When an `.async` / `.url` load fails, the error view is shown. **Tapping the error view retries the load.**
+When an `.async` / `.url` load fails, the error view is shown. The default error view **retries the load when tapped**. A custom `errorContent` can trigger a retry via `@Environment(\.imageViewerRetry)`:
+
+```swift
+struct MyErrorView: View {
+    let error: Error
+    @Environment(\.imageViewerRetry) private var retry
+
+    var body: some View {
+        Button("Retry") { retry() }
+    }
+}
+```
 
 ## Gestures
 

@@ -231,25 +231,59 @@ public struct DefaultLoadingView: View {
   }
 }
 
-/// Default error view for the image viewer.
+/// An action that retries loading the failed image.
+///
+/// Available to a custom `errorContent` via `@Environment(\.imageViewerRetry)`,
+/// so custom error views can offer their own retry control.
+public struct ImageViewerRetryAction: Sendable {
+  let action: @Sendable @MainActor () -> Void
+
+  @MainActor
+  public func callAsFunction() {
+    action()
+  }
+}
+
+private struct ImageViewerRetryKey: EnvironmentKey {
+  static let defaultValue = ImageViewerRetryAction(action: {})
+}
+
+extension EnvironmentValues {
+  /// An action that retries loading the current failed image.
+  public var imageViewerRetry: ImageViewerRetryAction {
+    get { self[ImageViewerRetryKey.self] }
+    set { self[ImageViewerRetryKey.self] = newValue }
+  }
+}
+
+/// Default error view for the image viewer. Tapping it retries the load.
 public struct DefaultErrorView: View {
   let error: Error
+  @Environment(\.imageViewerRetry) private var retry
 
   public init(error: Error) {
     self.error = error
   }
 
   public var body: some View {
-    VStack(spacing: 16) {
-      Image(systemName: "exclamationmark.triangle")
-        .font(.largeTitle)
-        .foregroundStyle(.white.opacity(0.6))
+    Button(action: { retry() }) {
+      VStack(spacing: 16) {
+        Image(systemName: "exclamationmark.triangle")
+          .font(.largeTitle)
+          .foregroundStyle(.white.opacity(0.6))
 
-      Text("Failed to load image")
-        .foregroundStyle(.white.opacity(0.8))
+        Text("Failed to load image")
+          .foregroundStyle(.white.opacity(0.8))
+
+        Text("Tap to retry")
+          .font(.footnote)
+          .foregroundStyle(.white.opacity(0.5))
+      }
     }
+    .buttonStyle(.plain)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(Text("Failed to load image"))
+    .accessibilityHint(Text("Double tap to retry"))
   }
 }
 
