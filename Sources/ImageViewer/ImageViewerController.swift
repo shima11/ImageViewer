@@ -3,6 +3,7 @@ import UIKit
 
 // MARK: - Image Viewer Controller
 
+@MainActor
 final class ImageViewerController: UIViewController {
 
   // MARK: - Properties
@@ -288,7 +289,7 @@ final class ImageViewerController: UIViewController {
       setupMultipleImagesViewer(initialImage: image)
     }
 
-    updateOverlay()
+    setupOverlay()
   }
 
   private func setupSingleImageViewer(with image: UIImage) {
@@ -359,31 +360,29 @@ final class ImageViewerController: UIViewController {
     }
   }
 
-  private func updateOverlay() {
-    // Remove existing overlay
-    overlayHostingController?.willMove(toParent: nil)
-    overlayHostingController?.view.removeFromSuperview()
-    overlayHostingController?.removeFromParent()
-    overlayContainerView?.removeFromSuperview()
-    closeButtonHostingController?.willMove(toParent: nil)
-    closeButtonHostingController?.view.removeFromSuperview()
-    closeButtonHostingController?.removeFromParent()
-
-    // Create overlay content (without close button)
+  /// Builds the overlay content for the current page.
+  private func makeOverlayContent() -> AnyView {
     let context = ImageViewerContext(
       currentIndex: currentIndex,
       totalCount: imageSources.count,
       dismiss: { [weak self] in self?.dismiss() }
     )
 
-    let overlayContent = OverlayContainerView(
-      context: context,
-      showPageIndicator: imageSources.count > 1,
-      overlay: overlayBuilder,
-      pageIndicator: pageIndicatorBuilder
+    return AnyView(
+      OverlayContainerView(
+        context: context,
+        showPageIndicator: imageSources.count > 1,
+        overlay: overlayBuilder,
+        pageIndicator: pageIndicatorBuilder
+      )
     )
+  }
 
-    let hostingController = UIHostingController(rootView: AnyView(overlayContent))
+  /// Creates the overlay and close button hosting controllers once. Subsequent
+  /// page changes only swap the overlay's root view (see `refreshOverlayContent`),
+  /// preserving view identity and avoiding constraint churn.
+  private func setupOverlay() {
+    let hostingController = UIHostingController(rootView: makeOverlayContent())
     hostingController.view.backgroundColor = .clear
 
     addChild(hostingController)
@@ -412,7 +411,8 @@ final class ImageViewerController: UIViewController {
     overlayHostingController = hostingController
     overlayContainerView = containerView
 
-    // Add close button separately (outside of PassthroughContainerView)
+    // Add close button separately (outside of PassthroughContainerView).
+    // It does not depend on the page, so it is built only once.
     let closeButtonView = closeButtonBuilder { [weak self] in self?.dismiss() }
       .padding(8)
 
@@ -432,6 +432,16 @@ final class ImageViewerController: UIViewController {
 
     closeButtonController.didMove(toParent: self)
     closeButtonHostingController = closeButtonController
+  }
+
+  /// Updates the overlay for the current page. Reuses the existing hosting
+  /// controller (swapping only its root view) so overlay `@State` is preserved.
+  private func refreshOverlayContent() {
+    guard let overlayHostingController else {
+      setupOverlay()
+      return
+    }
+    overlayHostingController.rootView = makeOverlayContent()
   }
 
   // MARK: - Appear Animation
@@ -684,7 +694,7 @@ extension ImageViewerController: UIPageViewControllerDelegate {
 
     if oldIndex != currentIndex {
       configuration.onPageChange?(currentIndex)
-      updateOverlay()
+      refreshOverlayContent()
 
       // Preload adjacent images for smooth scrolling
       preloadAdjacentImages()
@@ -753,8 +763,8 @@ private final class PassthroughContainerView: UIView {
       return nil
     }
 
-    // Check if the hit view contains a SwiftUI Button by examining view hierarchy
-    if containsSwiftUIButton(hitView, in: hostedView) {
+    // Capture touches only when the hit view is interactive
+    if containsInteractiveElement(hitView, in: hostedView) {
       return hostedView
     }
 
@@ -762,25 +772,19 @@ private final class PassthroughContainerView: UIView {
     return nil
   }
 
-  private func containsSwiftUIButton(_ view: UIView?, in hostingView: UIView) -> Bool {
+  /// Walks up from the hit view to the hosting view, treating any
+  /// `UIControl` or view with gesture recognizers (e.g. a SwiftUI `Button`) as
+  /// interactive. Avoids depending on SwiftUI's private view class names.
+  private func containsInteractiveElement(_ view: UIView?, in hostingView: UIView) -> Bool {
     guard let view = view else { return false }
 
     var current: UIView? = view
     while let v = current, v != hostingView {
-      let className = String(describing: type(of: v))
-
-      // SwiftUI Button uses internal views with "Button" in the name
-      if className.contains("Button") {
-        return true
-      }
-
-      // Check for gesture recognizers (for custom interactive views)
-      if let gestures = v.gestureRecognizers, !gestures.isEmpty {
-        return true
-      }
-
-      // Check for UIControl subclasses
       if v is UIControl {
+        return true
+      }
+
+      if let gestures = v.gestureRecognizers, !gestures.isEmpty {
         return true
       }
 
