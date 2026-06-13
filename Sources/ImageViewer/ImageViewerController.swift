@@ -45,7 +45,7 @@ final class ImageViewerController: UIViewController {
   private let imageLoader: ImageLoader
   private var cachedPageControllers: [Int: ZoomableImageViewController] = [:]
 
-  private let loadingIndicatorTag = 999
+  private var loadingHostingController: UIHostingController<AnyView>?
   private let errorViewTag = 998
 
   // MARK: - Callbacks
@@ -205,23 +205,31 @@ final class ImageViewerController: UIViewController {
   }
 
   private func showLoading() {
-    // Default: UIActivityIndicatorView
-    let indicator = UIActivityIndicatorView(style: .large)
-    indicator.color = .white
-    indicator.tag = loadingIndicatorTag
-    indicator.translatesAutoresizingMaskIntoConstraints = false
-    view.addSubview(indicator)
+    // Callers pair showLoading()/hideLoading(), so this is normally nil here;
+    // the guard prevents stacking a second host if that contract is ever broken.
+    guard loadingHostingController == nil else { return }
+
+    let hostingController = UIHostingController(rootView: loadingContentBuilder())
+    addChild(hostingController)
+    view.addSubview(hostingController.view)
+    hostingController.view.backgroundColor = .clear
+    hostingController.view.translatesAutoresizingMaskIntoConstraints = false
 
     NSLayoutConstraint.activate([
-      indicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      indicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+      hostingController.view.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+      hostingController.view.centerYAnchor.constraint(equalTo: view.centerYAnchor),
     ])
 
-    indicator.startAnimating()
+    hostingController.didMove(toParent: self)
+    loadingHostingController = hostingController
   }
 
   private func hideLoading() {
-    view.viewWithTag(loadingIndicatorTag)?.removeFromSuperview()
+    guard let hostingController = loadingHostingController else { return }
+    hostingController.willMove(toParent: nil)
+    hostingController.view.removeFromSuperview()
+    hostingController.removeFromParent()
+    loadingHostingController = nil
   }
 
   private func showError(_ error: Error) {
