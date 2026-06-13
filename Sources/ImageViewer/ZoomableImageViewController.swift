@@ -1,4 +1,5 @@
 import UIKit
+import VisionKit
 
 // MARK: - Delegate Protocol
 
@@ -23,6 +24,9 @@ final class ZoomableImageViewController: UIViewController {
 
   private let scrollView = UIScrollView()
   private let imageView = UIImageView()
+  private let analysisInteraction = ImageAnalysisInteraction()
+  private let imageAnalyzer = ImageAnalyzer()
+  private var analysisTask: Task<Void, Never>?
   private(set) var currentImage: UIImage
   private let configuration: ImageViewerConfiguration
 
@@ -78,6 +82,7 @@ final class ZoomableImageViewController: UIViewController {
     currentImage = newImage
     imageView.image = newImage
     imageView.preferredImageDynamicRange = configuration.enableHDR ? .high : .standard
+    analysisInteraction.analysis = nil
 
     // Update content size and zoom
     let imageSize = newImage.size
@@ -91,6 +96,8 @@ final class ZoomableImageViewController: UIViewController {
       hasInitializedZoomScale = true
       centerImageInScrollView()
     }
+
+    analyzeCurrentImage()
   }
 
   // MARK: - Lifecycle
@@ -100,6 +107,7 @@ final class ZoomableImageViewController: UIViewController {
     setupViews()
     setupGestures()
     setupAccessibility()
+    analyzeCurrentImage()
   }
 
   override func viewDidLayoutSubviews() {
@@ -149,6 +157,13 @@ final class ZoomableImageViewController: UIViewController {
     let imageSize = currentImage.size
     imageView.frame = CGRect(origin: .zero, size: imageSize)
     scrollView.contentSize = imageSize
+
+    // Live Text setup
+    if configuration.enablesLiveText, ImageAnalyzer.isSupported {
+      imageView.isUserInteractionEnabled = true
+      analysisInteraction.preferredInteractionTypes = .textSelection
+      imageView.addInteraction(analysisInteraction)
+    }
   }
 
   private func setupGestures() {
@@ -259,6 +274,27 @@ final class ZoomableImageViewController: UIViewController {
 
     default:
       break
+    }
+  }
+
+  // MARK: - Live Text Analysis
+
+  private func analyzeCurrentImage() {
+    guard configuration.enablesLiveText, ImageAnalyzer.isSupported else { return }
+
+    analysisTask?.cancel()
+    let image = currentImage
+    analysisTask = Task { [weak self] in
+      do {
+        let configuration = ImageAnalyzer.Configuration([.text])
+        let analysis = try await self?.imageAnalyzer.analyze(image, configuration: configuration)
+        guard !Task.isCancelled, let self, let analysis else { return }
+        // Only apply if the image hasn't changed since analysis started.
+        guard self.currentImage === image else { return }
+        self.analysisInteraction.analysis = analysis
+      } catch {
+        // No text or analysis failed — normal case, nothing to surface to the user.
+      }
     }
   }
 
