@@ -354,12 +354,24 @@ final class ImageViewerController: UIViewController {
     cleanupDistantCachedControllers()
   }
 
-  /// Remove cached controllers that are more than 2 pages away from current index
+  /// Remove cached controllers more than 2 pages away from the current index, and
+  /// release their async-loaded images so memory does not grow unbounded in large
+  /// galleries. Pre-loaded `.image` sources are retained by the caller and kept so
+  /// they need not be re-supplied; only `.async` images (which can be re-fetched)
+  /// are released.
   private func cleanupDistantCachedControllers() {
     let keepRange = (currentIndex - 2)...(currentIndex + 2)
-    let keysToRemove = cachedPageControllers.keys.filter { !keepRange.contains($0) }
-    for key in keysToRemove {
+
+    let controllerKeysToRemove = cachedPageControllers.keys.filter { !keepRange.contains($0) }
+    for key in controllerKeysToRemove {
       cachedPageControllers.removeValue(forKey: key)
+    }
+
+    for index in imageSources.indices where !keepRange.contains(index) {
+      guard case .async = imageSources[index] else { continue }
+      loadedImages.removeValue(forKey: index)
+      // Drop the cached error too, so the image can be re-fetched when revisited.
+      loadErrors.removeValue(forKey: index)
     }
   }
 
