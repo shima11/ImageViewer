@@ -49,6 +49,68 @@ struct AspectFitFrameTests {
   }
 }
 
+@Suite("ImageViewerGeometry.interactiveFrame")
+struct InteractiveFrameTests {
+  // 100x200 fullscreen frame, center at (50, 100).
+  private let finalFrame = CGRect(x: 0, y: 0, width: 100, height: 200)
+
+  @Test("Progress zero with no translation is the identity")
+  func progressZero() {
+    let frame = ImageViewerGeometry.interactiveFrame(
+      finalFrame: finalFrame, translation: .zero, progress: 0
+    )
+    #expect(frame == finalFrame)
+  }
+
+  @Test("Translation only moves the frame without resizing")
+  func translationOnly() {
+    let frame = ImageViewerGeometry.interactiveFrame(
+      finalFrame: finalFrame, translation: CGPoint(x: 0, y: 100), progress: 0
+    )
+    #expect(frame.size == finalFrame.size)
+    #expect(frame.minX == 0)
+    #expect(frame.minY == 100)
+  }
+
+  @Test("Full progress shrinks to minScale around the center")
+  func fullProgress() {
+    let frame = ImageViewerGeometry.interactiveFrame(
+      finalFrame: finalFrame, translation: .zero, progress: 1, minScale: 0.5
+    )
+    // 0.5 scale of 100x200 = 50x100, recentered on (50, 100).
+    #expect(frame.width == 50)
+    #expect(frame.height == 100)
+    #expect(frame.midX == 50)
+    #expect(frame.midY == 100)
+  }
+
+  @Test("Downward drag moves the image down, not toward a source frame")
+  func downwardDragFollowsFinger() {
+    // Regression for the old double-application: with a positive translation.y
+    // the image center must move down, never get pulled up toward sourceFrame.
+    let frame = ImageViewerGeometry.interactiveFrame(
+      finalFrame: finalFrame, translation: CGPoint(x: 0, y: 60), progress: 0.2
+    )
+    #expect(frame.midY > finalFrame.midY)
+  }
+
+  @Test("Horizontal translation moves the center sideways")
+  func horizontalTranslation() {
+    let frame = ImageViewerGeometry.interactiveFrame(
+      finalFrame: finalFrame, translation: CGPoint(x: 30, y: 0), progress: 0.2
+    )
+    #expect(frame.midX == finalFrame.midX + 30)
+  }
+
+  @Test("Size shrinks monotonically as progress increases")
+  func monotonicShrink() {
+    let a = ImageViewerGeometry.interactiveFrame(finalFrame: finalFrame, translation: .zero, progress: 0.25)
+    let b = ImageViewerGeometry.interactiveFrame(finalFrame: finalFrame, translation: .zero, progress: 0.75)
+    #expect(b.width < a.width)
+    #expect(b.height < a.height)
+  }
+}
+
 @Suite("ImageViewerGeometry.keepRange")
 struct KeepRangeTests {
   @Test("Default radius keeps +/- 2 around current")

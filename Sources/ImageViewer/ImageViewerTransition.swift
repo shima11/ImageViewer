@@ -238,25 +238,14 @@ final class ImageViewerTransitionAnimator {
       finalFrame = calculateFinalFrame(in: containerView.bounds)
     }
 
-    // Calculate interpolated frame
-    let interpolatedFrame: CGRect
-    if let sourceFrame = sourceFrame {
-      interpolatedFrame = CGRect(
-        x: finalFrame.origin.x + (sourceFrame.origin.x - finalFrame.origin.x) * progress + translation.x,
-        y: finalFrame.origin.y + (sourceFrame.origin.y - finalFrame.origin.y) * progress + translation.y,
-        width: finalFrame.width + (sourceFrame.width - finalFrame.width) * progress,
-        height: finalFrame.height + (sourceFrame.height - finalFrame.height) * progress
-      )
-    } else {
-      interpolatedFrame = CGRect(
-        x: finalFrame.origin.x + translation.x,
-        y: finalFrame.origin.y + translation.y,
-        width: finalFrame.width,
-        height: finalFrame.height
-      )
-    }
-
-    imageView.frame = interpolatedFrame
+    // Track the finger by translating finalFrame's center while shrinking it,
+    // rather than interpolating toward sourceFrame. Source-frame convergence is
+    // handled by the release animation, so they are not applied at once.
+    imageView.frame = ImageViewerGeometry.interactiveFrame(
+      finalFrame: finalFrame,
+      translation: translation,
+      progress: progress
+    )
     imageView.layer.cornerRadius = configuration.transitionCornerRadius * progress
 
     // Update background opacity
