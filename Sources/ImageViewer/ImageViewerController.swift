@@ -422,7 +422,7 @@ final class ImageViewerController: UIViewController {
   /// they need not be re-supplied; only `.async` images (which can be re-fetched)
   /// are released.
   private func cleanupDistantCachedControllers() {
-    let keepRange = (currentIndex - 2)...(currentIndex + 2)
+    let keepRange = ImageViewerGeometry.keepRange(around: currentIndex)
 
     let controllerKeysToRemove = cachedPageControllers.keys.filter { !keepRange.contains($0) }
     for key in controllerKeysToRemove {
@@ -641,10 +641,7 @@ final class ImageViewerController: UIViewController {
   }
 
   private func getSourceFrame(for index: Int) -> CGRect? {
-    // After rotation the captured source frames are stale, so fall back to a
-    // slide-down dismiss instead of animating to a wrong position.
-    guard !hasRotated else { return nil }
-    return sourceFrames.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+    ImageViewerGeometry.sourceFrame(from: sourceFrames, at: index, hasRotated: hasRotated)
   }
 
   private func updateOverlayAlpha(_ alpha: CGFloat) {
