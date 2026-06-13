@@ -80,10 +80,10 @@ public struct ImageViewerConfiguration: Sendable {
   // MARK: - Callbacks
 
   /// Called when the viewer is dismissed.
-  public var onDismiss: (@Sendable () -> Void)?
+  public var onDismiss: (@MainActor () -> Void)?
 
   /// Called when the current page changes.
-  public var onPageChange: (@Sendable (Int) -> Void)?
+  public var onPageChange: (@MainActor (Int) -> Void)?
 
   // MARK: - Init
 
@@ -94,8 +94,8 @@ public struct ImageViewerConfiguration: Sendable {
     transitionCornerRadius: CGFloat = 8,
     dismissThreshold: CGFloat = 100,
     dismissVelocityThreshold: CGFloat = 500,
-    onDismiss: (@Sendable () -> Void)? = nil,
-    onPageChange: (@Sendable (Int) -> Void)? = nil
+    onDismiss: (@MainActor () -> Void)? = nil,
+    onPageChange: (@MainActor (Int) -> Void)? = nil
   ) {
     self.maxScale = maxScale
     self.doubleTapScale = doubleTapScale
@@ -431,7 +431,13 @@ private struct ImageViewerModifier<
       hideViewer()
     }
 
-    manager.show(viewController: controller)
+    // If no active scene is available, the window cannot be presented.
+    // Roll back state so the viewer can be presented again later.
+    guard manager.show(viewController: controller) else {
+      windowManager = nil
+      isPresented = false
+      return
+    }
   }
 
   private func hideViewer() {
