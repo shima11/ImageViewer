@@ -101,11 +101,13 @@ final class ImageLoader {
     let task = Task { @MainActor [weak self] in
       do {
         let image = try await loader()
-        guard let self else { return }
+        // Skip if the load was cancelled (e.g. the index was released), so a
+        // stale result does not revive removed state.
+        guard let self, !Task.isCancelled else { return }
         self.imageStates[index] = .loaded(image)
         completion(.success(image))
       } catch {
-        guard let self else { return }
+        guard let self, !Task.isCancelled else { return }
         ImageViewerLog.loading.error(
           "Failed to load image at index \(index, privacy: .public): \(error.localizedDescription, privacy: .public)"
         )
@@ -131,6 +133,8 @@ final class ImageLoader {
   func releaseImages(outside keepRange: ClosedRange<Int>) {
     for index in imageSources.indices where !keepRange.contains(index) {
       guard case .async = imageSources[index] else { continue }
+      // Cancel any in-flight load so it does not revive the released state.
+      imageStates[index]?.task?.cancel()
       imageStates.removeValue(forKey: index)
     }
   }
