@@ -182,7 +182,7 @@ final class ImageViewerController: UIViewController {
 
   private func loadImageAsync(at index: Int, completion: @escaping (Result<UIImage, Error>) -> Void) {
     guard index >= 0, index < imageSources.count else {
-      completion(.failure(ImageViewerError.invalidData))
+      completion(.failure(ImageViewerError.indexOutOfRange(index: index, count: imageSources.count)))
       return
     }
 
@@ -222,6 +222,9 @@ final class ImageViewerController: UIViewController {
         self.updateCachedController(at: index, with: image)
       } catch {
         guard let self else { return }
+        ImageViewerLog.loading.error(
+          "Failed to load image at index \(index, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
         self.loadErrors[index] = error
         self.loadingTasks.removeValue(forKey: index)
         completion(.failure(error))
@@ -825,10 +828,15 @@ private struct OverlayContainerView: View {
 // MARK: - Image Viewer Error
 
 enum ImageViewerError: Error, LocalizedError {
+  /// The requested index is outside the bounds of the image sources.
+  case indexOutOfRange(index: Int, count: Int)
+  /// The image source could not be loaded asynchronously.
   case invalidData
 
   var errorDescription: String? {
     switch self {
+    case .indexOutOfRange(let index, let count):
+      return "Requested image index \(index) is out of range (count: \(count))."
     case .invalidData:
       return "The image data is invalid or corrupted."
     }
