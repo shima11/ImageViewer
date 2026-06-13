@@ -266,6 +266,12 @@ ImageSource.async({ try await fetchImage() }, placeholder: thumbnailImage)
 - Escape action support
 - Reduce Motion support (simplified animations)
 
+## Memory
+
+- Pre-loaded `.image` sources are held for the lifetime of the viewer (the caller already owns these images).
+- `.async` images more than two pages away from the current index are released and re-fetched when revisited, so large galleries do not grow memory unbounded.
+- Very large images are drawn at full size without tiling; provide appropriately sized images for memory-constrained scenarios.
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
