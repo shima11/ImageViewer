@@ -57,26 +57,7 @@ final class ImageViewerTransitionAnimator {
   // MARK: - Frame Calculations
 
   private func calculateFinalFrame(in bounds: CGRect) -> CGRect {
-    guard image.size.width > 0, image.size.height > 0 else {
-      return bounds
-    }
-
-    let imageAspect = image.size.width / image.size.height
-    let boundsAspect = bounds.width / bounds.height
-
-    let finalSize: CGSize
-    if imageAspect > boundsAspect {
-      finalSize = CGSize(width: bounds.width, height: bounds.width / imageAspect)
-    } else {
-      finalSize = CGSize(width: bounds.height * imageAspect, height: bounds.height)
-    }
-
-    return CGRect(
-      x: (bounds.width - finalSize.width) / 2,
-      y: (bounds.height - finalSize.height) / 2,
-      width: finalSize.width,
-      height: finalSize.height
-    )
+    ImageViewerGeometry.aspectFitFrame(imageSize: image.size, in: bounds)
   }
 
   // MARK: - Appear Animation
