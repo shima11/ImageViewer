@@ -333,4 +333,23 @@ final class ImageViewerTransitionAnimator {
   func completeInteractiveDismiss(completion: @escaping () -> Void) {
     performDismissAnimation(completion: completion)
   }
+
+  // MARK: - Rotation
+
+  /// Recomputes the final frame for the new container bounds and, if the
+  /// transition image view is visible (mid-transition), snaps it to the new
+  /// frame. Any in-flight animation is stopped first.
+  func handleRotation() {
+    currentAnimator?.stopAnimation(true)
+    currentAnimator = nil
+
+    guard let containerView = containerView, let imageView = imageView else { return }
+    finalFrame = calculateFinalFrame(in: containerView.bounds)
+
+    // Only reposition while the transition image view is on screen. When the
+    // zoomable content is shown, it lays itself out independently.
+    if !imageView.isHidden {
+      imageView.frame = finalFrame
+    }
+  }
 }
