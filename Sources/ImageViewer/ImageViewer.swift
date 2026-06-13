@@ -121,15 +121,27 @@ public struct DefaultCloseButton: View {
   }
 
   public var body: some View {
-    Button(action: dismiss) {
-      Image(systemName: "xmark.circle.fill")
-        .font(.title)
-        .symbolRenderingMode(.palette)
-        .foregroundStyle(.white, .black.opacity(0.5))
-        .frame(width: 44, height: 44)
+    if #available(iOS 26, *) {
+      Button(action: dismiss) {
+        Image(systemName: "xmark")
+          .font(.body.weight(.semibold))
+          .foregroundStyle(.white)
+          .frame(width: 44, height: 44)
+      }
+      .buttonStyle(.glass)
+      .accessibilityLabel(Text("Close"))
+      .accessibilityHint(Text("Closes the image viewer"))
+    } else {
+      Button(action: dismiss) {
+        Image(systemName: "xmark.circle.fill")
+          .font(.title)
+          .symbolRenderingMode(.palette)
+          .foregroundStyle(.white, .black.opacity(0.5))
+          .frame(width: 44, height: 44)
+      }
+      .accessibilityLabel(Text("Close"))
+      .accessibilityHint(Text("Closes the image viewer"))
     }
-    .accessibilityLabel(Text("Close"))
-    .accessibilityHint(Text("Closes the image viewer"))
   }
 }
 
@@ -144,6 +156,19 @@ public struct DefaultPageIndicator: View {
   }
 
   public var body: some View {
+    if #available(iOS 26, *) {
+      dots
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .glassEffect(in: .capsule)
+        .accessibilityHidden(true)
+    } else {
+      dots
+        .accessibilityHidden(true)
+    }
+  }
+
+  private var dots: some View {
     HStack(spacing: 6) {
       ForEach(0..<totalCount, id: \.self) { index in
         Circle()
@@ -151,7 +176,6 @@ public struct DefaultPageIndicator: View {
           .frame(width: 6, height: 6)
       }
     }
-    .accessibilityHidden(true)
   }
 }
 
