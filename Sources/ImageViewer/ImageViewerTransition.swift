@@ -319,9 +319,15 @@ final class ImageViewerTransitionAnimator {
 
   /// Recomputes the final frame for the new container bounds and, if the
   /// transition image view is visible (mid-transition), snaps it to the new
-  /// frame. Any in-flight animation is stopped first.
+  /// frame. Any in-flight animation is finished first so its completion fires.
   func handleRotation() {
-    currentAnimator?.stopAnimation(true)
+    // Finish (not abandon) any in-flight animation so its completion fires.
+    // stopAnimation(true) would skip addCompletion, leaving the controller's
+    // transitionState stuck mid-transition and the viewer unable to dismiss.
+    if let animator = currentAnimator, animator.state == .active {
+      animator.stopAnimation(false)
+      animator.finishAnimation(at: .end)
+    }
     currentAnimator = nil
 
     guard let containerView = containerView, let imageView = imageView else { return }
