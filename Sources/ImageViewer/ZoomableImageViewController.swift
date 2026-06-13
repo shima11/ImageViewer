@@ -16,6 +16,7 @@ protocol ZoomableImageViewControllerDelegate: AnyObject {
 
 // MARK: - Zoomable Image View Controller
 
+@MainActor
 final class ZoomableImageViewController: UIViewController {
 
   // MARK: - Properties
