@@ -176,6 +176,12 @@ final class ImageViewerController: UIViewController {
       return
     }
 
+    // Already failed - do not retry automatically to avoid refetch loops
+    if let error = loadErrors[index] {
+      completion(.failure(error))
+      return
+    }
+
     let source = imageSources[index]
 
     guard case .async(let loader, _) = source else {

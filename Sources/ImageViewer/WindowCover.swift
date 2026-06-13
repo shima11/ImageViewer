@@ -111,13 +111,16 @@ final class WindowCoverManager {
     window.makeKeyAndVisible()
   }
 
-  func show(viewController: UIViewController) {
+  /// Presents the view controller in a new window.
+  /// - Returns: `true` if the window was presented, `false` if no active scene was available.
+  @discardableResult
+  func show(viewController: UIViewController) -> Bool {
     guard
       let windowScene = UIApplication.shared.connectedScenes
         .compactMap({ $0 as? UIWindowScene })
         .first(where: { $0.activationState == .foregroundActive })
     else {
-      return
+      return false
     }
 
     let window = UIWindow(windowScene: windowScene)
@@ -127,6 +130,7 @@ final class WindowCoverManager {
 
     self.window = window
     window.makeKeyAndVisible()
+    return true
   }
 
   func hide() {
