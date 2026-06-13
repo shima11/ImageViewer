@@ -189,9 +189,10 @@ final class ImageViewerController: UIViewController {
       return
     }
 
-    let task = Task { @MainActor in
+    let task = Task { @MainActor [weak self] in
       do {
         let image = try await loader()
+        guard let self else { return }
         self.loadedImages[index] = image
         self.loadingTasks.removeValue(forKey: index)
         completion(.success(image))
@@ -199,6 +200,7 @@ final class ImageViewerController: UIViewController {
         // Update cached controller if exists
         self.updateCachedController(at: index, with: image)
       } catch {
+        guard let self else { return }
         self.loadErrors[index] = error
         self.loadingTasks.removeValue(forKey: index)
         completion(.failure(error))
