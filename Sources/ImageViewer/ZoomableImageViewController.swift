@@ -78,6 +78,7 @@ final class ZoomableImageViewController: UIViewController {
 
     currentImage = newImage
     imageView.image = newImage
+    imageView.preferredImageDynamicRange = configuration.enableHDR ? .high : .standard
 
     // Update content size and zoom
     let imageSize = newImage.size

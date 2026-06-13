@@ -114,6 +114,18 @@ final class ImageViewerController: UIViewController {
     return true
   }
 
+  // MARK: - Accessibility Actions
+
+  override func accessibilityPerformEscape() -> Bool {
+    dismiss()
+    return true
+  }
+
+  override func accessibilityPerformMagicTap() -> Bool {
+    dismiss()
+    return true
+  }
+
   override func viewWillTransition(
     to size: CGSize,
     with coordinator: UIViewControllerTransitionCoordinator
