@@ -142,6 +142,7 @@ final class ZoomableImageViewController: UIViewController {
     // ImageView setup (using manual frame, not Auto Layout)
     imageView.image = currentImage
     imageView.contentMode = .scaleAspectFit
+    imageView.preferredImageDynamicRange = configuration.enableHDR ? .high : .standard
     scrollView.addSubview(imageView)
 
     // Set initial image size

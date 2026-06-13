@@ -231,6 +231,7 @@ import SDWebImage
 | `doubleTapScale` | `CGFloat` | `3.0` | Zoom scale on double-tap |
 | `backgroundColor` | `Color` | `.black` | Viewer background color |
 | `transitionCornerRadius` | `CGFloat` | `8` | Corner radius during transition |
+| `enableHDR` | `Bool` | `false` | Render images in high dynamic range when available (iOS 17+) |
 | `dismissThreshold` | `CGFloat` | `100` | Vertical distance to trigger dismiss |
 | `dismissVelocityThreshold` | `CGFloat` | `500` | Velocity threshold for dismiss |
 | `onDismiss` | `(() -> Void)?` | `nil` | Called when viewer is dismissed |
@@ -245,7 +246,12 @@ ImageSource.image(uiImage)
 // Async loader with optional placeholder
 // Use this to integrate with your image loading library
 ImageSource.async({ try await fetchImage() }, placeholder: thumbnailImage)
+
+// Convenience URL loader (URLSession, no caching)
+ImageSource.url(url, placeholder: thumbnailImage)
 ```
+
+When an `.async` / `.url` load fails, the error view is shown. **Tapping the error view retries the load.**
 
 ## Gestures
 
