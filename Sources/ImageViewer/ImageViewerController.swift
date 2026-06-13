@@ -436,7 +436,7 @@ final class ImageViewerController: UIViewController {
     // safe area resolves (e.g. before the window is attached) and after rotation.
     NSLayoutConstraint.activate([
       closeButtonController.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-      closeButtonController.view.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+      closeButtonController.view.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
     ])
 
     closeButtonController.didMove(toParent: self)

@@ -168,9 +168,8 @@ public struct DefaultCloseButton: View {
     if #available(iOS 26, *) {
       Button(action: dismiss) {
         Image(systemName: "xmark")
-          .font(.body.weight(.semibold))
           .foregroundStyle(.white)
-          .frame(width: 44, height: 44)
+          .frame(width: 36, height: 36)
       }
       .buttonStyle(.glass)
       .accessibilityLabel(Text("Close"))
@@ -178,10 +177,10 @@ public struct DefaultCloseButton: View {
     } else {
       Button(action: dismiss) {
         Image(systemName: "xmark.circle.fill")
-          .font(.title)
+          .imageScale(.large)
           .symbolRenderingMode(.palette)
           .foregroundStyle(.white, .black.opacity(0.5))
-          .frame(width: 44, height: 44)
+          .frame(width: 36, height: 36)
       }
       .accessibilityLabel(Text("Close"))
       .accessibilityHint(Text("Closes the image viewer"))
