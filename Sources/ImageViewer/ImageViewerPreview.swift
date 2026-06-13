@@ -20,6 +20,10 @@ import SwiftUI
   FillModeTransitionPreview()
 }
 
+#Preview("Live Text") {
+  LiveTextPreview()
+}
+
 // MARK: - Single Image Preview Views
 
 private struct SingleImageWithOverlayPreview: View {
@@ -70,6 +74,57 @@ private struct SingleImageWithOverlayPreview: View {
             .background(.black.opacity(0.5))
         }
       }
+    }
+  }
+}
+
+// MARK: - Live Text Preview View
+
+private struct LiveTextPreview: View {
+  @State private var isPresented = false
+  @State private var sourceFrame: CGRect = .zero
+
+  // A document-style image with readable text so Live Text can detect and
+  // offer selection/copy. Run in the simulator (not just Canvas) to interact.
+  private let sampleImage = PreviewImageGenerator.textDocument(
+    lines: [
+      "ETHIOPIA",
+      "Yirgacheffe",
+      "Washed Process",
+      "Medium Roast",
+      "Floral · Citrus · Tea-like",
+    ]
+  )
+
+  var body: some View {
+    NavigationStack {
+      VStack {
+        Text("Long-press the text after opening")
+          .foregroundStyle(.secondary)
+          .padding()
+
+        Image(uiImage: sampleImage)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 180, height: 225)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+          .shadow(radius: 4)
+          .opacity(isPresented ? 0 : 1)
+          .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+            sourceFrame = frame
+          }
+          .onTapGesture {
+            isPresented = true
+          }
+
+        Spacer()
+      }
+      .navigationTitle("Live Text")
+      .imageViewer(
+        isPresented: $isPresented,
+        sources: [.image(sampleImage)],
+        sourceFrames: [sourceFrame]
+      )
     }
   }
 }
@@ -349,6 +404,43 @@ private struct FillModeTransitionPreview: View {
 // MARK: - Preview Image Generator
 
 enum PreviewImageGenerator {
+  /// Generates an image with multiple lines of readable text on a solid background,
+  /// suitable for exercising Live Text (in-image text selection).
+  static func textDocument(
+    lines: [String],
+    background: UIColor = .systemBrown,
+    size: CGSize = CGSize(width: 800, height: 1000)
+  ) -> UIImage {
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { context in
+      background.setFill()
+      context.fill(CGRect(origin: .zero, size: size))
+
+      let paragraph = NSMutableParagraphStyle()
+      paragraph.alignment = .center
+      paragraph.lineSpacing = size.height * 0.02
+      let attributes: [NSAttributedString.Key: Any] = [
+        .font: UIFont.systemFont(ofSize: size.height * 0.045, weight: .semibold),
+        .foregroundColor: UIColor.white,
+        .paragraphStyle: paragraph,
+      ]
+      let text = lines.joined(separator: "\n") as NSString
+      let bounding = text.boundingRect(
+        with: CGSize(width: size.width * 0.85, height: size.height),
+        options: [.usesLineFragmentOrigin, .usesFontLeading],
+        attributes: attributes,
+        context: nil
+      )
+      let textRect = CGRect(
+        x: (size.width - bounding.width) / 2,
+        y: (size.height - bounding.height) / 2,
+        width: bounding.width,
+        height: bounding.height
+      )
+      text.draw(in: textRect, withAttributes: attributes)
+    }
+  }
+
   static func gradient(
     colors: (UIColor, UIColor),
     size: CGSize,

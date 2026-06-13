@@ -104,6 +104,11 @@ public struct ImageViewerConfiguration: Sendable {
   /// displays (iOS 17+). Has no effect for SDR images.
   public var enableHDR: Bool
 
+  // MARK: - Live Text
+
+  /// Whether to enable Live Text (in-image text selection and copy). Default is true.
+  public var enablesLiveText: Bool
+
   // MARK: - Dismiss Gesture
 
   /// The vertical distance required to dismiss the viewer. Default is 100 points.
@@ -128,6 +133,7 @@ public struct ImageViewerConfiguration: Sendable {
     backgroundColor: Color = .black,
     transitionCornerRadius: CGFloat = 8,
     enableHDR: Bool = false,
+    enablesLiveText: Bool = true,
     dismissThreshold: CGFloat = 100,
     dismissVelocityThreshold: CGFloat = 500,
     onDismiss: (@MainActor () -> Void)? = nil,
@@ -138,6 +144,7 @@ public struct ImageViewerConfiguration: Sendable {
     self.backgroundColor = backgroundColor
     self.transitionCornerRadius = transitionCornerRadius
     self.enableHDR = enableHDR
+    self.enablesLiveText = enablesLiveText
     self.dismissThreshold = dismissThreshold
     self.dismissVelocityThreshold = dismissVelocityThreshold
     self.onDismiss = onDismiss

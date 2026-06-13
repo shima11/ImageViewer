@@ -1,4 +1,5 @@
 import UIKit
+import VisionKit
 
 // MARK: - Delegate Protocol
 
@@ -23,6 +24,11 @@ final class ZoomableImageViewController: UIViewController {
 
   private let scrollView = UIScrollView()
   private let imageView = UIImageView()
+  // Shared so concurrent page view controllers serialize their OCR through a
+  // single analyzer instead of spawning parallel analyses.
+  private static let sharedImageAnalyzer = ImageAnalyzer()
+  private let analysisInteraction = ImageAnalysisInteraction()
+  private var analysisTask: Task<Void, Never>?
   private(set) var currentImage: UIImage
   private let configuration: ImageViewerConfiguration
 
@@ -70,6 +76,10 @@ final class ZoomableImageViewController: UIViewController {
     fatalError("init(coder:) has not been implemented")
   }
 
+  deinit {
+    analysisTask?.cancel()
+  }
+
   // MARK: - Image Update
 
   func updateImage(_ newImage: UIImage) {
@@ -78,6 +88,7 @@ final class ZoomableImageViewController: UIViewController {
     currentImage = newImage
     imageView.image = newImage
     imageView.preferredImageDynamicRange = configuration.enableHDR ? .high : .standard
+    analysisInteraction.analysis = nil
 
     // Update content size and zoom
     let imageSize = newImage.size
@@ -91,6 +102,8 @@ final class ZoomableImageViewController: UIViewController {
       hasInitializedZoomScale = true
       centerImageInScrollView()
     }
+
+    analyzeCurrentImage()
   }
 
   // MARK: - Lifecycle
@@ -100,6 +113,18 @@ final class ZoomableImageViewController: UIViewController {
     setupViews()
     setupGestures()
     setupAccessibility()
+  }
+
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    // Analyze only once the page is actually on screen so offscreen
+    // UIPageViewController preload pages don't run OCR.
+    analyzeCurrentImage()
+  }
+
+  override func viewDidDisappear(_ animated: Bool) {
+    super.viewDidDisappear(animated)
+    analysisTask?.cancel()
   }
 
   override func viewDidLayoutSubviews() {
@@ -149,6 +174,13 @@ final class ZoomableImageViewController: UIViewController {
     let imageSize = currentImage.size
     imageView.frame = CGRect(origin: .zero, size: imageSize)
     scrollView.contentSize = imageSize
+
+    // Live Text setup
+    if configuration.enablesLiveText, ImageAnalyzer.isSupported {
+      imageView.isUserInteractionEnabled = true
+      analysisInteraction.preferredInteractionTypes = .textSelection
+      imageView.addInteraction(analysisInteraction)
+    }
   }
 
   private func setupGestures() {
@@ -163,7 +195,9 @@ final class ZoomableImageViewController: UIViewController {
       ? "Image \(pageIndex + 1) of \(totalCount)"
       : "Image"
     imageView.accessibilityTraits = .image
-    imageView.accessibilityHint = "Double tap to zoom, swipe down to dismiss"
+    let liveTextHint = (configuration.enablesLiveText && ImageAnalyzer.isSupported)
+      ? " Long press to select text." : ""
+    imageView.accessibilityHint = "Double tap to zoom, swipe down to dismiss.\(liveTextHint)"
   }
 
   // MARK: - Zoom Scale
@@ -201,6 +235,8 @@ final class ZoomableImageViewController: UIViewController {
   // MARK: - Single Tap
 
   @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+    // Don't toggle the overlay while the user is interacting with Live Text.
+    if analysisInteraction.hasActiveTextSelection { return }
     delegate?.zoomableImageViewControllerDidSingleTap(self)
   }
 
@@ -259,6 +295,27 @@ final class ZoomableImageViewController: UIViewController {
 
     default:
       break
+    }
+  }
+
+  // MARK: - Live Text Analysis
+
+  private func analyzeCurrentImage() {
+    guard configuration.enablesLiveText, ImageAnalyzer.isSupported else { return }
+
+    analysisTask?.cancel()
+    let image = currentImage
+    analysisTask = Task { [weak self] in
+      do {
+        let configuration = ImageAnalyzer.Configuration([.text])
+        let analysis = try await Self.sharedImageAnalyzer.analyze(image, configuration: configuration)
+        guard !Task.isCancelled, let self else { return }
+        // Only apply if the image hasn't changed since analysis started.
+        guard self.currentImage === image else { return }
+        self.analysisInteraction.analysis = analysis
+      } catch {
+        // No text or analysis failed — normal case, nothing to surface to the user.
+      }
     }
   }
 
