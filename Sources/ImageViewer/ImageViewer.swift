@@ -187,6 +187,11 @@ public struct DefaultPageIndicator: View {
   let currentIndex: Int
   let totalCount: Int
 
+  // Scale the dots with Dynamic Type so they stay legible on larger text
+  // settings and bigger displays.
+  @ScaledMetric private var dotSize: CGFloat = 6
+  @ScaledMetric private var dotSpacing: CGFloat = 6
+
   public init(currentIndex: Int, totalCount: Int) {
     self.currentIndex = currentIndex
     self.totalCount = totalCount
@@ -206,11 +211,11 @@ public struct DefaultPageIndicator: View {
   }
 
   private var dots: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: dotSpacing) {
       ForEach(0..<totalCount, id: \.self) { index in
         Circle()
           .fill(index == currentIndex ? Color.white : Color.white.opacity(0.5))
-          .frame(width: 6, height: 6)
+          .frame(width: dotSize, height: dotSize)
       }
     }
   }

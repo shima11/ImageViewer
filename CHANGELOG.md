@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The default close button is pinned to the safe area layout guide (correct under rotation and varying safe areas).
 - Async-loaded images more than two pages away are released to bound memory in large galleries.
 - `ImageViewerError` now distinguishes `.indexOutOfRange(index:count:)` from `.invalidData`.
+- VoiceOver announces the image position ("Image N of M") in multi-image galleries.
+- The default page indicator dots scale with Dynamic Type.
 
 ### Fixed
 - The viewer could become unpresentable when no active scene was available; state is now rolled back so it can be presented again.

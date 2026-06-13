@@ -31,6 +31,9 @@ final class ZoomableImageViewController: UIViewController {
   /// Page index for use in UIPageViewController
   var pageIndex: Int = 0
 
+  /// Total number of pages, used for the VoiceOver position announcement.
+  var totalCount: Int = 1
+
   /// Whether to enable the built-in dismiss gesture
   /// Set to false when used inside UIPageViewController to avoid gesture conflicts
   var enableDismissGesture: Bool = true
@@ -163,7 +166,9 @@ final class ZoomableImageViewController: UIViewController {
 
   private func setupAccessibility() {
     imageView.isAccessibilityElement = true
-    imageView.accessibilityLabel = "Image"
+    imageView.accessibilityLabel = totalCount > 1
+      ? "Image \(pageIndex + 1) of \(totalCount)"
+      : "Image"
     imageView.accessibilityTraits = .image
     imageView.accessibilityHint = "Double tap to zoom, swipe down to dismiss"
   }

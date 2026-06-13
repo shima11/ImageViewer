@@ -707,6 +707,7 @@ final class ImageViewerController: UIViewController {
 
     let controller = ZoomableImageViewController(image: image, configuration: configuration)
     controller.pageIndex = index
+    controller.totalCount = imageSources.count
     controller.delegate = self
 
     // Cache the controller
