@@ -108,6 +108,7 @@ final class WindowCoverManager {
 
   func show<Content: View>(content: Content, scene: UIWindowScene? = nil) {
     guard let windowScene = resolveScene(scene) else {
+      ImageViewerLog.presentation.error("No active window scene available; cover not presented.")
       return
     }
 
@@ -131,6 +132,7 @@ final class WindowCoverManager {
   @discardableResult
   func show(viewController: UIViewController, scene: UIWindowScene? = nil) -> Bool {
     guard let windowScene = resolveScene(scene) else {
+      ImageViewerLog.presentation.error("No active window scene available; viewer not presented.")
       return false
     }
 
