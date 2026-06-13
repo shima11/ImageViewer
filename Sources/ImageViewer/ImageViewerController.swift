@@ -185,7 +185,7 @@ final class ImageViewerController: UIViewController {
 
   private func preloadAllSyncImages() {
     for (index, source) in imageSources.enumerated() {
-      if case .image(let image) = source {
+      if let image = source.syncImage {
         loadedImages[index] = image
       }
     }
