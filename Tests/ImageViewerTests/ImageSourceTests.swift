@@ -31,4 +31,32 @@ struct ImageSourceTests {
     let source = ImageSource.async({ self.makeImage() }, placeholder: nil)
     #expect(source.placeholder == nil)
   }
+
+  @Test("URL source exposes its placeholder")
+  func urlSourceExposesPlaceholder() {
+    let placeholder = makeImage()
+    let source = ImageSource.url(URL(string: "https://example.com/a.jpg")!, placeholder: placeholder)
+    #expect(source.placeholder === placeholder)
+  }
+
+  @Test("URL source without placeholder returns nil")
+  func urlSourceWithoutPlaceholder() {
+    let source = ImageSource.url(URL(string: "https://example.com/a.jpg")!)
+    #expect(source.placeholder == nil)
+  }
+}
+
+@Suite("ImageViewerConfiguration")
+struct ImageViewerConfigurationTests {
+
+  @Test("HDR is disabled by default")
+  func hdrDisabledByDefault() {
+    #expect(ImageViewerConfiguration().enableHDR == false)
+    #expect(ImageViewerConfiguration.default.enableHDR == false)
+  }
+
+  @Test("HDR can be enabled")
+  func hdrCanBeEnabled() {
+    #expect(ImageViewerConfiguration(enableHDR: true).enableHDR == true)
+  }
 }

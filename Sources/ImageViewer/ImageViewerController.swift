@@ -42,6 +42,9 @@ final class ImageViewerController: UIViewController {
   private var loadErrors: [Int: Error] = [:]
   private var cachedPageControllers: [Int: ZoomableImageViewController] = [:]
 
+  private let loadingIndicatorTag = 999
+  private let errorViewTag = 998
+
   // MARK: - Callbacks
 
   var onDismiss: (() -> Void)?
@@ -250,7 +253,7 @@ final class ImageViewerController: UIViewController {
     // Default: UIActivityIndicatorView
     let indicator = UIActivityIndicatorView(style: .large)
     indicator.color = .white
-    indicator.tag = 999
+    indicator.tag = loadingIndicatorTag
     indicator.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(indicator)
 
@@ -263,7 +266,7 @@ final class ImageViewerController: UIViewController {
   }
 
   private func hideLoading() {
-    view.viewWithTag(999)?.removeFromSuperview()
+    view.viewWithTag(loadingIndicatorTag)?.removeFromSuperview()
   }
 
   private func showError(_ error: Error) {
@@ -273,6 +276,15 @@ final class ImageViewerController: UIViewController {
     view.addSubview(hostingController.view)
     hostingController.view.backgroundColor = .clear
     hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+    hostingController.view.tag = errorViewTag
+
+    // Tap the error view to retry loading. Do not cancel touches so buttons in a
+    // custom errorContent still receive taps (a redundant retry is a no-op once
+    // the cached error is cleared).
+    let tap = UITapGestureRecognizer(target: self, action: #selector(handleErrorTap))
+    tap.cancelsTouchesInView = false
+    hostingController.view.addGestureRecognizer(tap)
+    hostingController.view.isUserInteractionEnabled = true
 
     NSLayoutConstraint.activate([
       hostingController.view.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -281,6 +293,36 @@ final class ImageViewerController: UIViewController {
 
     hostingController.didMove(toParent: self)
     backgroundView.alpha = 1
+  }
+
+  private func hideError() {
+    view.viewWithTag(errorViewTag)?.removeFromSuperview()
+  }
+
+  @objc private func handleErrorTap() {
+    retryLoad(at: currentIndex)
+  }
+
+  /// Clears the cached error for the index and retries loading it.
+  private func retryLoad(at index: Int) {
+    guard loadErrors[index] != nil else { return }
+    loadErrors.removeValue(forKey: index)
+    hideError()
+    showLoading()
+    loadImageAsync(at: index) { [weak self] result in
+      guard let self else { return }
+      self.hideLoading()
+      switch result {
+      case .success(let image):
+        self.setupImageViewer(with: image)
+        // The initial appear animation already ran (and was a no-op because no
+        // content existed yet), so run it now to install the content controllers.
+        self.transitionState = .appearing
+        self.performAppearAnimation()
+      case .failure(let error):
+        self.showError(error)
+      }
+    }
   }
 
   // MARK: - Image Viewer Setup

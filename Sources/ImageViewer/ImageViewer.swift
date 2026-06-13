@@ -47,6 +47,24 @@ public enum ImageSource: Sendable {
       return placeholder
     }
   }
+
+  /// A convenience source that loads an image from a URL with `URLSession`.
+  ///
+  /// This is a thin wrapper over `.async` for simple cases without caching. For
+  /// caching, integrate your preferred image loading library via `.async`.
+  ///
+  /// - Parameters:
+  ///   - url: The image URL.
+  ///   - placeholder: An optional placeholder shown while loading.
+  public static func url(_ url: URL, placeholder: UIImage? = nil) -> ImageSource {
+    .async({
+      let (data, _) = try await URLSession.shared.data(from: url)
+      guard let image = UIImage(data: data) else {
+        throw ImageViewerError.invalidData
+      }
+      return image
+    }, placeholder: placeholder)
+  }
 }
 
 // MARK: - Configuration (Core behavior only)
@@ -68,6 +86,12 @@ public struct ImageViewerConfiguration: Sendable {
 
   /// Corner radius during transition animation. Default is 8.
   public var transitionCornerRadius: CGFloat
+
+  /// Whether to render images in high dynamic range when available. Default is false.
+  ///
+  /// When enabled, HDR images are displayed with extended brightness on capable
+  /// displays (iOS 17+). Has no effect for SDR images.
+  public var enableHDR: Bool
 
   // MARK: - Dismiss Gesture
 
@@ -92,6 +116,7 @@ public struct ImageViewerConfiguration: Sendable {
     doubleTapScale: CGFloat = 3.0,
     backgroundColor: Color = .black,
     transitionCornerRadius: CGFloat = 8,
+    enableHDR: Bool = false,
     dismissThreshold: CGFloat = 100,
     dismissVelocityThreshold: CGFloat = 500,
     onDismiss: (@MainActor () -> Void)? = nil,
@@ -101,6 +126,7 @@ public struct ImageViewerConfiguration: Sendable {
     self.doubleTapScale = doubleTapScale
     self.backgroundColor = backgroundColor
     self.transitionCornerRadius = transitionCornerRadius
+    self.enableHDR = enableHDR
     self.dismissThreshold = dismissThreshold
     self.dismissVelocityThreshold = dismissVelocityThreshold
     self.onDismiss = onDismiss

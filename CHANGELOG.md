@@ -11,7 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Device rotation support: the transition frame and zoom scale follow the new orientation.
 - iOS 26 Liquid Glass styling for the default close button and page indicator (falls back on earlier versions).
 - `os.Logger` based logging (subsystem `com.shima11.ImageViewer`) for image loading and presentation failures.
-- Unit tests for index clamping and `ImageSource.placeholder`.
+- `ImageSource.url(_:placeholder:)` convenience source backed by `URLSession`.
+- `ImageViewerConfiguration.enableHDR` to render HDR images on capable displays (iOS 17+).
+- Tapping the error view retries a failed async/URL image load.
+- Unit tests for index clamping, `ImageSource.placeholder` / `.url`, and `enableHDR`.
 
 ### Changed
 - `ImageViewerConfiguration.onDismiss` / `onPageChange` are now `@MainActor` closures, so updating SwiftUI state from them no longer triggers concurrency warnings.
