@@ -36,9 +36,11 @@ private struct WindowCoverModifier<CoverContent: View>: ViewModifier {
   @ViewBuilder var coverContent: () -> CoverContent
 
   @State private var windowManager: WindowCoverManager?
+  @State private var hostScene: UIWindowScene?
 
   func body(content: Content) -> some View {
     content
+      .trackWindowScene($hostScene)
       .onChange(of: isPresented) { _, newValue in
         if newValue {
           showWindow()
@@ -59,7 +61,7 @@ private struct WindowCoverModifier<CoverContent: View>: ViewModifier {
       content: coverContent
     )
 
-    manager.show(content: wrappedContent)
+    manager.show(content: wrappedContent, scene: hostScene)
   }
 
   private func hideWindow() {
@@ -90,12 +92,22 @@ private struct WindowCoverContentView<Content: View>: View {
 final class WindowCoverManager {
   private var window: UIWindow?
 
-  func show<Content: View>(content: Content) {
-    guard
-      let windowScene = UIApplication.shared.connectedScenes
-        .compactMap({ $0 as? UIWindowScene })
-        .first(where: { $0.activationState == .foregroundActive })
-    else {
+  /// Resolves the window scene to present in.
+  ///
+  /// Prefers the scene injected from the presenting view (correct under
+  /// multi-window / Stage Manager), falling back to the first foreground-active
+  /// scene when the injected one is unavailable.
+  private func resolveScene(_ preferredScene: UIWindowScene?) -> UIWindowScene? {
+    if let preferredScene, preferredScene.activationState != .unattached {
+      return preferredScene
+    }
+    return UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .first { $0.activationState == .foregroundActive }
+  }
+
+  func show<Content: View>(content: Content, scene: UIWindowScene? = nil) {
+    guard let windowScene = resolveScene(scene) else {
       return
     }
 
@@ -105,6 +117,7 @@ final class WindowCoverManager {
 
     let hostingController = UIHostingController(rootView: content)
     hostingController.view.backgroundColor = .clear
+    hostingController.view.accessibilityViewIsModal = true
     window.rootViewController = hostingController
 
     self.window = window
@@ -112,20 +125,19 @@ final class WindowCoverManager {
   }
 
   /// Presents the view controller in a new window.
+  /// - Parameter scene: The window scene to present in. Falls back to the first
+  ///   foreground-active scene when `nil`.
   /// - Returns: `true` if the window was presented, `false` if no active scene was available.
   @discardableResult
-  func show(viewController: UIViewController) -> Bool {
-    guard
-      let windowScene = UIApplication.shared.connectedScenes
-        .compactMap({ $0 as? UIWindowScene })
-        .first(where: { $0.activationState == .foregroundActive })
-    else {
+  func show(viewController: UIViewController, scene: UIWindowScene? = nil) -> Bool {
+    guard let windowScene = resolveScene(scene) else {
       return false
     }
 
     let window = UIWindow(windowScene: windowScene)
     window.backgroundColor = .clear
     window.windowLevel = .alert + 1
+    viewController.view.accessibilityViewIsModal = true
     window.rootViewController = viewController
 
     self.window = window
@@ -161,5 +173,42 @@ extension EnvironmentValues {
   var windowCoverDismiss: WindowCoverDismissAction {
     get { self[WindowCoverDismissKey.self] }
     set { self[WindowCoverDismissKey.self] = newValue }
+  }
+}
+
+// MARK: - Window Scene Reader
+
+/// Reads the `UIWindowScene` of the presenting view's window.
+///
+/// Used to present the cover window in the same scene as the caller, which keeps
+/// presentation correct under multi-window / Stage Manager.
+struct WindowSceneReader: UIViewRepresentable {
+  @Binding var scene: UIWindowScene?
+
+  func makeUIView(context: Context) -> SceneTrackingView {
+    let view = SceneTrackingView()
+    view.onResolveScene = { resolved in
+      // Avoid mutating state during view layout.
+      DispatchQueue.main.async { scene = resolved }
+    }
+    return view
+  }
+
+  func updateUIView(_ uiView: SceneTrackingView, context: Context) {}
+
+  final class SceneTrackingView: UIView {
+    var onResolveScene: ((UIWindowScene?) -> Void)?
+
+    override func didMoveToWindow() {
+      super.didMoveToWindow()
+      onResolveScene?(window?.windowScene)
+    }
+  }
+}
+
+extension View {
+  /// Tracks the window scene of this view's window into the given binding.
+  func trackWindowScene(_ scene: Binding<UIWindowScene?>) -> some View {
+    background(WindowSceneReader(scene: scene))
   }
 }

@@ -413,9 +413,11 @@ private struct ImageViewerModifier<
   @ViewBuilder var errorContent: (Error) -> ErrorContent
 
   @State private var windowManager: WindowCoverManager?
+  @State private var hostScene: UIWindowScene?
 
   func body(content: Content) -> some View {
     content
+      .trackWindowScene($hostScene)
       .onChange(of: isPresented) { _, newValue in
         if newValue {
           showViewer()
@@ -457,7 +459,7 @@ private struct ImageViewerModifier<
 
     // If no active scene is available, the window cannot be presented.
     // Roll back state so the viewer can be presented again later.
-    guard manager.show(viewController: controller) else {
+    guard manager.show(viewController: controller, scene: hostScene) else {
       windowManager = nil
       isPresented = false
       return
