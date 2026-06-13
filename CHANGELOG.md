@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VoiceOver Magic Tap and Escape gestures now dismiss the viewer.
 - Unit tests for index clamping, `ImageSource.placeholder` / `.url`, and `enableHDR`.
 - GitHub Actions CI building (strict concurrency, warnings as errors) and testing on every push and pull request.
+- DocC documentation catalog with a landing page and organized API topics.
 
 ### Changed
 - `ImageViewerConfiguration.onDismiss` / `onPageChange` are now `@MainActor` closures, so updating SwiftUI state from them no longer triggers concurrency warnings.
