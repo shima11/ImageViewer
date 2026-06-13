@@ -34,10 +34,6 @@ final class ZoomableImageViewController: UIViewController {
   /// Total number of pages, used for the VoiceOver position announcement.
   var totalCount: Int = 1
 
-  /// Whether to enable the built-in dismiss gesture
-  /// Set to false when used inside UIPageViewController to avoid gesture conflicts
-  var enableDismissGesture: Bool = true
-
   private var hasInitializedZoomScale = false
 
   // MARK: - Gesture Recognizers
@@ -158,10 +154,7 @@ final class ZoomableImageViewController: UIViewController {
   private func setupGestures() {
     scrollView.addGestureRecognizer(singleTapGesture)
     scrollView.addGestureRecognizer(doubleTapGesture)
-
-    if enableDismissGesture {
-      view.addGestureRecognizer(dismissPanGesture)
-    }
+    view.addGestureRecognizer(dismissPanGesture)
   }
 
   private func setupAccessibility() {
