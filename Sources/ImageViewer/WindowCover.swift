@@ -148,8 +148,13 @@ final class WindowCoverManager {
   }
 
   func hide() {
-    window?.isHidden = true
+    // Resign key first so the previous key window regains first responder
+    // (e.g. a keyboard that was active before presenting), then tear down the
+    // window deterministically instead of relying on ARC timing.
     window?.resignKey()
+    window?.isHidden = true
+    window?.rootViewController = nil
+    window?.windowScene = nil
     window = nil
   }
 }

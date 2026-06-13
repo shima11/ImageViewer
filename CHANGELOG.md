@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ImageSource.url(_:placeholder:)` convenience source backed by `URLSession`.
 - `ImageViewerConfiguration.enableHDR` to render HDR images on capable displays (iOS 17+).
 - Tapping the error view retries a failed async/URL image load.
+- VoiceOver Magic Tap and Escape gestures now dismiss the viewer.
 - Unit tests for index clamping, `ImageSource.placeholder` / `.url`, and `enableHDR`.
 
 ### Changed
@@ -29,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The image load `Task` no longer retains the controller (`[weak self]`).
 - A dismiss animation interrupted by rotation no longer strands the `onDismiss` callback.
 - After rotation, dismissal no longer animates to a stale source frame; it falls back to a slide-down animation.
+- HDR (`preferredImageDynamicRange`) is now re-applied when the image is updated, so async/placeholder swaps keep the setting.
+- The cover window is torn down deterministically on hide (root view controller and scene detached), improving keyboard restoration and avoiding stray retained tasks.
 
 ## [0.1.0]
 
