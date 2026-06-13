@@ -199,6 +199,10 @@ public struct DefaultPageIndicator: View {
 
   public var body: some View {
     if #available(iOS 26, *) {
+      // The page indicator and close button are hosted in separate
+      // UIHostingControllers (so the close button is not rebuilt on every page
+      // change), so they cannot share a GlassEffectContainer. They use the same
+      // regular glass material and sit far apart, so morphing is not needed.
       dots
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
