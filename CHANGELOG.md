@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Failed async image loads are no longer re-fetched in a loop.
 - The image load `Task` no longer retains the controller (`[weak self]`).
 - A dismiss animation interrupted by rotation no longer strands the `onDismiss` callback.
+- After rotation, dismissal no longer animates to a stale source frame; it falls back to a slide-down animation.
 
 ## [0.1.0]
 
