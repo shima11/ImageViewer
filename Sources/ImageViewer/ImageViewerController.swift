@@ -23,6 +23,11 @@ final class ImageViewerController: UIViewController {
   private var currentIndex: Int
   private var transitionState: TransitionState = .appearing
 
+  /// Set once the device rotates. Source frames are captured in the presenting
+  /// view's coordinate space at present time, so they are no longer valid after
+  /// rotation; dismissal then falls back to a slide-down animation.
+  private var hasRotated = false
+
   // MARK: - UI Components
 
   private var backgroundView: UIView!
@@ -114,6 +119,9 @@ final class ImageViewerController: UIViewController {
     with coordinator: UIViewControllerTransitionCoordinator
   ) {
     super.viewWillTransition(to: size, with: coordinator)
+
+    // Source frames are now stale; dismissal falls back to slide-down.
+    hasRotated = true
 
     // While a dismiss/interactive transition is running, let it finish so its
     // completion (onDismiss) fires; interrupting it would strand the viewer.
@@ -621,7 +629,10 @@ final class ImageViewerController: UIViewController {
   }
 
   private func getSourceFrame(for index: Int) -> CGRect? {
-    sourceFrames.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+    // After rotation the captured source frames are stale, so fall back to a
+    // slide-down dismiss instead of animating to a wrong position.
+    guard !hasRotated else { return nil }
+    return sourceFrames.flatMap { $0.indices.contains(index) ? $0[index] : nil }
   }
 
   private func updateOverlayAlpha(_ alpha: CGFloat) {
