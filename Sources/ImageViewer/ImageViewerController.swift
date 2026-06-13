@@ -395,7 +395,6 @@ final class ImageViewerController: UIViewController {
     // Add close button separately (outside of PassthroughContainerView)
     let closeButtonView = closeButtonBuilder { [weak self] in self?.dismiss() }
       .padding(8)
-      .padding(.top, safeAreaTop)
 
     let closeButtonController = UIHostingController(rootView: AnyView(closeButtonView))
     closeButtonController.view.backgroundColor = .clear
@@ -404,22 +403,15 @@ final class ImageViewerController: UIViewController {
     addChild(closeButtonController)
     view.addSubview(closeButtonController.view)
 
+    // Pin to the safe area so the position is correct regardless of when the
+    // safe area resolves (e.g. before the window is attached) and after rotation.
     NSLayoutConstraint.activate([
-      closeButtonController.view.topAnchor.constraint(equalTo: view.topAnchor),
-      closeButtonController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      closeButtonController.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+      closeButtonController.view.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
     ])
 
     closeButtonController.didMove(toParent: self)
     closeButtonHostingController = closeButtonController
-  }
-
-  private var safeAreaTop: CGFloat {
-    UIApplication.shared.connectedScenes
-      .compactMap { $0 as? UIWindowScene }
-      .first?
-      .windows
-      .first?
-      .safeAreaInsets.top ?? 0
   }
 
   // MARK: - Appear Animation
