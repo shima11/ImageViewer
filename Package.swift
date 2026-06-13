@@ -18,5 +18,9 @@ let package = Package(
     .target(
       name: "ImageViewer"
     ),
+    .testTarget(
+      name: "ImageViewerTests",
+      dependencies: ["ImageViewer"]
+    ),
   ]
 )

@@ -66,7 +66,7 @@ final class ImageViewerController: UIViewController {
     @ViewBuilder errorContent: @escaping (Error) -> ErrorContent
   ) {
     self.imageSources = imageSources
-    let validIndex = max(0, min(initialIndex, max(0, imageSources.count - 1)))
+    let validIndex = ImageViewerIndex.clamp(initialIndex, count: imageSources.count)
     self.initialIndex = validIndex
     self.currentIndex = validIndex
     self.sourceFrames = sourceFrames
