@@ -2,6 +2,7 @@
 
 A SwiftUI image viewer with smooth zoom transitions, gesture-based navigation, and full customization support.
 
+[![CI](https://github.com/shima11/ImageViewer/actions/workflows/ci.yml/badge.svg)](https://github.com/shima11/ImageViewer/actions/workflows/ci.yml)
 [![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-iOS%2017+-blue.svg)](https://developer.apple.com/ios/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
