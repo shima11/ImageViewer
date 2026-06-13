@@ -42,9 +42,35 @@ final class ImageViewerController: UIViewController {
 
   // MARK: - Loading State
 
-  private var loadedImages: [Int: UIImage] = [:]
-  private var loadingTasks: [Int: Task<Void, Never>] = [:]
-  private var loadErrors: [Int: Error] = [:]
+  /// Per-index image loading state. One state per index makes contradictory
+  /// combinations (e.g. loading and loaded at once) unrepresentable.
+  private enum ImageState {
+    case loading(Task<Void, Never>)
+    case loaded(UIImage)
+    case failed(Error)
+
+    var image: UIImage? {
+      if case .loaded(let image) = self { return image }
+      return nil
+    }
+
+    var task: Task<Void, Never>? {
+      if case .loading(let task) = self { return task }
+      return nil
+    }
+
+    var error: Error? {
+      if case .failed(let error) = self { return error }
+      return nil
+    }
+
+    var isLoading: Bool {
+      if case .loading = self { return true }
+      return false
+    }
+  }
+
+  private var imageStates: [Int: ImageState] = [:]
   private var cachedPageControllers: [Int: ZoomableImageViewController] = [:]
 
   private let loadingIndicatorTag = 999
@@ -176,7 +202,7 @@ final class ImageViewerController: UIViewController {
     preloadAllSyncImages()
 
     // Load the initial image
-    if let image = loadedImages[currentIndex] {
+    if let image = imageStates[currentIndex]?.image {
       setupImageViewer(with: image)
     } else {
       // Need to load async
@@ -198,7 +224,7 @@ final class ImageViewerController: UIViewController {
   private func preloadAllSyncImages() {
     for (index, source) in imageSources.enumerated() {
       if let image = source.syncImage {
-        loadedImages[index] = image
+        imageStates[index] = .loaded(image)
       }
     }
   }
@@ -210,18 +236,18 @@ final class ImageViewerController: UIViewController {
     }
 
     // Already loaded
-    if let image = loadedImages[index] {
+    if let image = imageStates[index]?.image {
       completion(.success(image))
       return
     }
 
     // Already loading
-    if loadingTasks[index] != nil {
+    if imageStates[index]?.isLoading == true {
       return
     }
 
     // Already failed - do not retry automatically to avoid refetch loops
-    if let error = loadErrors[index] {
+    if let error = imageStates[index]?.error {
       completion(.failure(error))
       return
     }
@@ -237,8 +263,7 @@ final class ImageViewerController: UIViewController {
       do {
         let image = try await loader()
         guard let self else { return }
-        self.loadedImages[index] = image
-        self.loadingTasks.removeValue(forKey: index)
+        self.imageStates[index] = .loaded(image)
         completion(.success(image))
 
         // Update cached controller if exists
@@ -248,12 +273,11 @@ final class ImageViewerController: UIViewController {
         ImageViewerLog.loading.error(
           "Failed to load image at index \(index, privacy: .public): \(error.localizedDescription, privacy: .public)"
         )
-        self.loadErrors[index] = error
-        self.loadingTasks.removeValue(forKey: index)
+        self.imageStates[index] = .failed(error)
         completion(.failure(error))
       }
     }
-    loadingTasks[index] = task
+    imageStates[index] = .loading(task)
   }
 
   private func updateCachedController(at index: Int, with image: UIImage) {
@@ -319,8 +343,8 @@ final class ImageViewerController: UIViewController {
 
   /// Clears the cached error for the index and retries loading it.
   private func retryLoad(at index: Int) {
-    guard loadErrors[index] != nil else { return }
-    loadErrors.removeValue(forKey: index)
+    guard imageStates[index]?.error != nil else { return }
+    imageStates.removeValue(forKey: index)
     hideError()
     showLoading()
     loadImageAsync(at: index) { [weak self] result in
@@ -399,7 +423,7 @@ final class ImageViewerController: UIViewController {
 
   private func preloadAdjacentImages() {
     let indicesToPreload = [currentIndex - 1, currentIndex + 1].filter {
-      $0 >= 0 && $0 < imageSources.count && loadedImages[$0] == nil
+      $0 >= 0 && $0 < imageSources.count && imageStates[$0]?.image == nil
     }
 
     for index in indicesToPreload {
@@ -425,9 +449,9 @@ final class ImageViewerController: UIViewController {
 
     for index in imageSources.indices where !keepRange.contains(index) {
       guard case .async = imageSources[index] else { continue }
-      loadedImages.removeValue(forKey: index)
-      // Drop the cached error too, so the image can be re-fetched when revisited.
-      loadErrors.removeValue(forKey: index)
+      // Releasing the state drops both the cached image and any cached error,
+      // so the image can be re-fetched when the page is revisited.
+      imageStates.removeValue(forKey: index)
     }
   }
 
@@ -631,7 +655,7 @@ final class ImageViewerController: UIViewController {
   }
 
   private func getCurrentImage() -> UIImage? {
-    loadedImages[singleImageController != nil ? 0 : currentIndex]
+    imageStates[singleImageController != nil ? 0 : currentIndex]?.image
   }
 
   private func getSourceFrame(for index: Int) -> CGRect? {
@@ -681,7 +705,7 @@ final class ImageViewerController: UIViewController {
     // Return cached controller if available and has correct image
     if let cached = cachedPageControllers[index] {
       // If image is now loaded but controller has placeholder, update it
-      if let image = loadedImages[index], cached.currentImage !== image {
+      if let image = imageStates[index]?.image, cached.currentImage !== image {
         cached.updateImage(image)
       }
       return cached
@@ -689,7 +713,7 @@ final class ImageViewerController: UIViewController {
 
     // Create new controller
     let image: UIImage
-    if let loadedImage = loadedImages[index] {
+    if let loadedImage = imageStates[index]?.image {
       image = loadedImage
     } else {
       // Use placeholder or create temporary one
@@ -722,7 +746,9 @@ final class ImageViewerController: UIViewController {
   // MARK: - Cleanup
 
   deinit {
-    loadingTasks.values.forEach { $0.cancel() }
+    for state in imageStates.values {
+      state.task?.cancel()
+    }
   }
 }
 

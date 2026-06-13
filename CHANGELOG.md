@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VoiceOver announces the image position ("Image N of M") in multi-image galleries.
 - The default page indicator dots scale with Dynamic Type.
 - Retry on load failure is now exposed via `@Environment(\.imageViewerRetry)`: the default error view retries on tap, and custom error views can trigger it explicitly. The viewer no longer adds a full-view tap gesture, so custom error content keeps control of its hit testing.
+- Internal image loading state is tracked by a single `[Int: ImageState]` map instead of three parallel dictionaries, making contradictory states unrepresentable.
 
 ### Fixed
 - The viewer could become unpresentable when no active scene was available; state is now rolled back so it can be presented again.
