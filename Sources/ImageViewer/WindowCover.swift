@@ -138,7 +138,10 @@ final class WindowCoverManager {
 
     let window = UIWindow(windowScene: windowScene)
     window.backgroundColor = .clear
-    window.windowLevel = .alert + 1
+    // Keep just above .normal rather than above .alert: VisionKit's Live Text
+    // edit menu (copy / look up) presents in its own window above the host, and
+    // a host at .alert+1 leaves no level above it, so the menu never appears.
+    window.windowLevel = .normal + 1
     viewController.view.accessibilityViewIsModal = true
     window.rootViewController = viewController
 
