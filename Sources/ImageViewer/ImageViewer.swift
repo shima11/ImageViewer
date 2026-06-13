@@ -48,6 +48,17 @@ public enum ImageSource: Sendable {
     }
   }
 
+  /// The already-available image for synchronous (`.image`) sources, or `nil`
+  /// for sources that must be loaded asynchronously.
+  var syncImage: UIImage? {
+    switch self {
+    case .image(let image):
+      return image
+    case .async:
+      return nil
+    }
+  }
+
   /// A convenience source that loads an image from a URL with `URLSession`.
   ///
   /// This is a thin wrapper over `.async` for simple cases without caching. For

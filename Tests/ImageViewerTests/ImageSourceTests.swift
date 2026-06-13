@@ -44,6 +44,42 @@ struct ImageSourceTests {
     let source = ImageSource.url(URL(string: "https://example.com/a.jpg")!)
     #expect(source.placeholder == nil)
   }
+
+  @Test("Pre-loaded image source exposes a sync image")
+  func imageSourceHasSyncImage() {
+    let image = makeImage()
+    #expect(ImageSource.image(image).syncImage === image)
+  }
+
+  @Test("Async and URL sources have no sync image")
+  func asyncSourcesHaveNoSyncImage() {
+    #expect(ImageSource.async({ self.makeImage() }, placeholder: nil).syncImage == nil)
+    #expect(ImageSource.url(URL(string: "https://example.com/a.jpg")!).syncImage == nil)
+  }
+
+  @Test("Only sync images are preloaded into the loaded-images map")
+  func onlySyncImagesArePreloaded() {
+    let img0 = makeImage()
+    let img2 = makeImage()
+    let sources: [ImageSource] = [
+      .image(img0),
+      .async({ self.makeImage() }, placeholder: nil),
+      .image(img2),
+    ]
+
+    // Mirrors ImageViewerController.preloadAllSyncImages.
+    var loaded: [Int: UIImage] = [:]
+    for (index, source) in sources.enumerated() {
+      if let image = source.syncImage {
+        loaded[index] = image
+      }
+    }
+
+    #expect(loaded.count == 2)
+    #expect(loaded[0] === img0)
+    #expect(loaded[1] == nil)
+    #expect(loaded[2] === img2)
+  }
 }
 
 @Suite("ImageViewerConfiguration")
