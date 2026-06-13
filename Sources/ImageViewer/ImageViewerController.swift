@@ -42,35 +42,7 @@ final class ImageViewerController: UIViewController {
 
   // MARK: - Loading State
 
-  /// Per-index image loading state. One state per index makes contradictory
-  /// combinations (e.g. loading and loaded at once) unrepresentable.
-  private enum ImageState {
-    case loading(Task<Void, Never>)
-    case loaded(UIImage)
-    case failed(Error)
-
-    var image: UIImage? {
-      if case .loaded(let image) = self { return image }
-      return nil
-    }
-
-    var task: Task<Void, Never>? {
-      if case .loading(let task) = self { return task }
-      return nil
-    }
-
-    var error: Error? {
-      if case .failed(let error) = self { return error }
-      return nil
-    }
-
-    var isLoading: Bool {
-      if case .loading = self { return true }
-      return false
-    }
-  }
-
-  private var imageStates: [Int: ImageState] = [:]
+  private let imageLoader: ImageLoader
   private var cachedPageControllers: [Int: ZoomableImageViewController] = [:]
 
   private let loadingIndicatorTag = 999
@@ -101,6 +73,7 @@ final class ImageViewerController: UIViewController {
     @ViewBuilder errorContent: @escaping (Error) -> ErrorContent
   ) {
     self.imageSources = imageSources
+    self.imageLoader = ImageLoader(imageSources: imageSources)
     let validIndex = ImageViewerIndex.clamp(initialIndex, count: imageSources.count)
     self.initialIndex = validIndex
     self.currentIndex = validIndex
@@ -198,16 +171,13 @@ final class ImageViewerController: UIViewController {
   // MARK: - Image Loading
 
   private func loadInitialImage() {
-    // Pre-load all UIImage sources synchronously
-    preloadAllSyncImages()
-
-    // Load the initial image
-    if let image = imageStates[currentIndex]?.image {
+    // Synchronous sources are pre-loaded by ImageLoader's initializer.
+    if let image = imageLoader.image(at: currentIndex) {
       setupImageViewer(with: image)
     } else {
       // Need to load async
       showLoading()
-      loadImageAsync(at: currentIndex) { [weak self] result in
+      imageLoader.load(at: currentIndex) { [weak self] result in
         guard let self = self else { return }
         self.hideLoading()
 
@@ -219,65 +189,6 @@ final class ImageViewerController: UIViewController {
         }
       }
     }
-  }
-
-  private func preloadAllSyncImages() {
-    for (index, source) in imageSources.enumerated() {
-      if let image = source.syncImage {
-        imageStates[index] = .loaded(image)
-      }
-    }
-  }
-
-  private func loadImageAsync(at index: Int, completion: @escaping (Result<UIImage, Error>) -> Void) {
-    guard index >= 0, index < imageSources.count else {
-      completion(.failure(ImageViewerError.indexOutOfRange(index: index, count: imageSources.count)))
-      return
-    }
-
-    // Already loaded
-    if let image = imageStates[index]?.image {
-      completion(.success(image))
-      return
-    }
-
-    // Already loading
-    if imageStates[index]?.isLoading == true {
-      return
-    }
-
-    // Already failed - do not retry automatically to avoid refetch loops
-    if let error = imageStates[index]?.error {
-      completion(.failure(error))
-      return
-    }
-
-    let source = imageSources[index]
-
-    guard case .async(let loader, _) = source else {
-      completion(.failure(ImageViewerError.invalidData))
-      return
-    }
-
-    let task = Task { @MainActor [weak self] in
-      do {
-        let image = try await loader()
-        guard let self else { return }
-        self.imageStates[index] = .loaded(image)
-        completion(.success(image))
-
-        // Update cached controller if exists
-        self.updateCachedController(at: index, with: image)
-      } catch {
-        guard let self else { return }
-        ImageViewerLog.loading.error(
-          "Failed to load image at index \(index, privacy: .public): \(error.localizedDescription, privacy: .public)"
-        )
-        self.imageStates[index] = .failed(error)
-        completion(.failure(error))
-      }
-    }
-    imageStates[index] = .loading(task)
   }
 
   private func updateCachedController(at index: Int, with image: UIImage) {
@@ -343,11 +254,10 @@ final class ImageViewerController: UIViewController {
 
   /// Clears the cached error for the index and retries loading it.
   private func retryLoad(at index: Int) {
-    guard imageStates[index]?.error != nil else { return }
-    imageStates.removeValue(forKey: index)
+    guard imageLoader.clearFailure(at: index) else { return }
     hideError()
     showLoading()
-    loadImageAsync(at: index) { [weak self] result in
+    imageLoader.load(at: index) { [weak self] result in
       guard let self else { return }
       self.hideLoading()
       switch result {
@@ -423,11 +333,14 @@ final class ImageViewerController: UIViewController {
 
   private func preloadAdjacentImages() {
     let indicesToPreload = [currentIndex - 1, currentIndex + 1].filter {
-      $0 >= 0 && $0 < imageSources.count && imageStates[$0]?.image == nil
+      $0 >= 0 && $0 < imageSources.count && imageLoader.image(at: $0) == nil
     }
 
     for index in indicesToPreload {
-      loadImageAsync(at: index) { _ in }
+      imageLoader.load(at: index) { [weak self] result in
+        guard let self, case .success(let image) = result else { return }
+        self.updateCachedController(at: index, with: image)
+      }
     }
 
     // Clean up cached controllers that are far from current index
@@ -435,10 +348,8 @@ final class ImageViewerController: UIViewController {
   }
 
   /// Remove cached controllers more than 2 pages away from the current index, and
-  /// release their async-loaded images so memory does not grow unbounded in large
-  /// galleries. Pre-loaded `.image` sources are retained by the caller and kept so
-  /// they need not be re-supplied; only `.async` images (which can be re-fetched)
-  /// are released.
+  /// release their async-loaded images (via the loader) so memory does not grow
+  /// unbounded in large galleries.
   private func cleanupDistantCachedControllers() {
     let keepRange = ImageViewerGeometry.keepRange(around: currentIndex)
 
@@ -447,12 +358,7 @@ final class ImageViewerController: UIViewController {
       cachedPageControllers.removeValue(forKey: key)
     }
 
-    for index in imageSources.indices where !keepRange.contains(index) {
-      guard case .async = imageSources[index] else { continue }
-      // Releasing the state drops both the cached image and any cached error,
-      // so the image can be re-fetched when the page is revisited.
-      imageStates.removeValue(forKey: index)
-    }
+    imageLoader.releaseImages(outside: keepRange)
   }
 
   /// Builds the overlay content for the current page.
@@ -655,7 +561,7 @@ final class ImageViewerController: UIViewController {
   }
 
   private func getCurrentImage() -> UIImage? {
-    imageStates[singleImageController != nil ? 0 : currentIndex]?.image
+    imageLoader.image(at: singleImageController != nil ? 0 : currentIndex)
   }
 
   private func getSourceFrame(for index: Int) -> CGRect? {
@@ -705,7 +611,7 @@ final class ImageViewerController: UIViewController {
     // Return cached controller if available and has correct image
     if let cached = cachedPageControllers[index] {
       // If image is now loaded but controller has placeholder, update it
-      if let image = imageStates[index]?.image, cached.currentImage !== image {
+      if let image = imageLoader.image(at: index), cached.currentImage !== image {
         cached.updateImage(image)
       }
       return cached
@@ -713,14 +619,17 @@ final class ImageViewerController: UIViewController {
 
     // Create new controller
     let image: UIImage
-    if let loadedImage = imageStates[index]?.image {
+    if let loadedImage = imageLoader.image(at: index) {
       image = loadedImage
     } else {
       // Use placeholder or create temporary one
       image = imageSources[index].placeholder ?? Self.transparentPlaceholder
 
-      // Start loading async image
-      loadImageAsync(at: index) { _ in }
+      // Start loading the async image; update the cached controller on success.
+      imageLoader.load(at: index) { [weak self] result in
+        guard let self, case .success(let image) = result else { return }
+        self.updateCachedController(at: index, with: image)
+      }
     }
 
     let controller = ZoomableImageViewController(image: image, configuration: configuration)
@@ -742,14 +651,6 @@ final class ImageViewerController: UIViewController {
       context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
     }
   }()
-
-  // MARK: - Cleanup
-
-  deinit {
-    for state in imageStates.values {
-      state.task?.cancel()
-    }
-  }
 }
 
 // MARK: - UIPageViewControllerDataSource
