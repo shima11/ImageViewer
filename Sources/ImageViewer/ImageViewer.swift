@@ -168,10 +168,12 @@ public struct DefaultCloseButton: View {
     if #available(iOS 26, *) {
       Button(action: dismiss) {
         Image(systemName: "xmark")
+          .font(.body.weight(.semibold))
           .foregroundStyle(.white)
-          .frame(width: 36, height: 36)
+          .frame(width: 24, height: 24)
       }
       .buttonStyle(.glass)
+      .buttonBorderShape(.circle)
       .accessibilityLabel(Text("Close"))
       .accessibilityHint(Text("Closes the image viewer"))
     } else {
@@ -409,6 +411,35 @@ extension View {
       configuration: configuration,
       overlay: overlay,
       closeButton: { DefaultCloseButton(dismiss: $0) },
+      pageIndicator: { DefaultPageIndicator(currentIndex: $0, totalCount: $1) },
+      loadingContent: { DefaultLoadingView() },
+      errorContent: { DefaultErrorView(error: $0) }
+    )
+  }
+
+  /// Presents an image viewer with default UI, a custom overlay, and a custom
+  /// close button.
+  ///
+  /// Pass `closeButton: { _ in EmptyView() }` to hide the close button entirely.
+  public func imageViewer<Overlay: View, CloseButton: View>(
+    isPresented: Binding<Bool>,
+    sources: [ImageSource],
+    initialIndex: Int = 0,
+    sourceFrames: [CGRect]? = nil,
+    sourceContentMode: ContentMode = .fit,
+    configuration: ImageViewerConfiguration = .default,
+    @ViewBuilder overlay: @escaping (ImageViewerContext) -> Overlay,
+    @ViewBuilder closeButton: @escaping (_ dismiss: @escaping () -> Void) -> CloseButton
+  ) -> some View {
+    imageViewer(
+      isPresented: isPresented,
+      sources: sources,
+      initialIndex: initialIndex,
+      sourceFrames: sourceFrames,
+      sourceContentMode: sourceContentMode,
+      configuration: configuration,
+      overlay: overlay,
+      closeButton: closeButton,
       pageIndicator: { DefaultPageIndicator(currentIndex: $0, totalCount: $1) },
       loadingContent: { DefaultLoadingView() },
       errorContent: { DefaultErrorView(error: $0) }

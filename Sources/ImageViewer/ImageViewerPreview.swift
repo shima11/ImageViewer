@@ -24,6 +24,18 @@ import SwiftUI
   LiveTextPreview()
 }
 
+// MARK: - Close Button Previews
+
+#Preview("Close Button") {
+  ZStack(alignment: .topTrailing) {
+    Color.black
+    DefaultCloseButton(dismiss: {})
+      .padding(.horizontal, 16)
+      .padding(.vertical, 8)
+  }
+  .ignoresSafeArea()
+}
+
 // MARK: - Single Image Preview Views
 
 private struct SingleImageWithOverlayPreview: View {

@@ -424,8 +424,11 @@ final class ImageViewerController: UIViewController {
 
     // Add close button separately (outside of PassthroughContainerView).
     // It does not depend on the page, so it is built only once.
+    // Match the standard navigation bar item inset so the button does not sit
+    // flush against the screen edge.
     let closeButtonView = closeButtonBuilder { [weak self] in self?.dismiss() }
-      .padding(8)
+      .padding(.horizontal, 16)
+      .padding(.vertical, 8)
 
     let closeButtonController = UIHostingController(rootView: AnyView(closeButtonView))
     closeButtonController.view.backgroundColor = .clear
