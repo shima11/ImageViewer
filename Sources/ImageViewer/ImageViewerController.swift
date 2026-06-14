@@ -271,10 +271,11 @@ final class ImageViewerController: UIViewController {
       switch result {
       case .success(let image):
         self.setupImageViewer(with: image)
-        // The initial appear animation already ran (and was a no-op because no
-        // content existed yet), so run it now to install the content controllers.
-        self.transitionState = .appearing
-        self.performAppearAnimation()
+        // The viewer is already on screen (the error view was showing), so just
+        // install the content without replaying the source-to-fullscreen appear
+        // animation, and settle directly into the presented state.
+        self.transitionState = .presented
+        self.showContentAfterAppear()
       case .failure(let error):
         self.showError(error)
       }
