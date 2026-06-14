@@ -273,9 +273,10 @@ final class ImageViewerController: UIViewController {
         self.setupImageViewer(with: image)
         // The viewer is already on screen (the error view was showing), so just
         // install the content without replaying the source-to-fullscreen appear
-        // animation, and settle directly into the presented state.
-        self.setTransitionState(.presented)
+        // animation, and settle directly into the presented state. Install the
+        // content first so the transition into .presented can reveal it.
         self.showContentAfterAppear()
+        self.setTransitionState(.presented)
       case .failure(let error):
         self.showError(error)
       }
@@ -458,15 +459,16 @@ final class ImageViewerController: UIViewController {
 
   private func performAppearAnimation() {
     transitionAnimator?.performAppearAnimation { [weak self] in
-      self?.setTransitionState(.presented)
+      // Install the content first so the transition into .presented reveals it.
       self?.showContentAfterAppear()
+      self?.setTransitionState(.presented)
     }
   }
 
   private func showContentAfterAppear() {
-    // Hide transition image view
-    transitionImageView?.isHidden = true
-
+    // Installs the content controllers. Visibility (hiding the transition image,
+    // showing the content) is applied by `applyVisibility` on the transition
+    // into .presented, which the caller performs right after this.
     if let singleController = singleImageController {
       // Show single image controller
       addChild(singleController)
@@ -524,7 +526,38 @@ final class ImageViewerController: UIViewController {
       return false
     }
     transitionState = next
+    applyVisibility(for: next)
     return true
+  }
+
+  /// Derives view visibility from the transition state, so the four visibility
+  /// concerns (transition image, content controllers, overlay) move together
+  /// from a single source of truth instead of being toggled by hand at each
+  /// call site. Callers that need to swap the transition image / rebuild the
+  /// animator must do so *before* the transition into a state that reveals the
+  /// transition image, since this only flips `isHidden` — it does not touch the
+  /// image content (see `prepareTransitionImageForCurrentPage`).
+  private func applyVisibility(for state: TransitionState) {
+    switch state {
+    case .appearing, .dismissing:
+      transitionImageView?.isHidden = false
+      setContentHidden(true)
+      updateOverlayAlpha(0)
+    case .interactive(let progress, _):
+      transitionImageView?.isHidden = false
+      setContentHidden(true)
+      updateOverlayAlpha(1 - progress)
+    case .presented:
+      transitionImageView?.isHidden = true
+      setContentHidden(false)
+      updateOverlayAlpha(1)
+    }
+  }
+
+  /// Hides or shows whichever content controller is in use (single or paged).
+  private func setContentHidden(_ hidden: Bool) {
+    singleImageController?.view.isHidden = hidden
+    pageViewController?.view.isHidden = hidden
   }
 
   // MARK: - Dismiss
@@ -535,10 +568,10 @@ final class ImageViewerController: UIViewController {
     // its own pan-release path (didRequestDismiss), not this slide-to-source
     // animation, so we don't interrupt it here.
     guard case .presented = transitionState else { return }
-    guard setTransitionState(.dismissing) else { return }
 
-    // Prepare for dismiss animation
-    prepareForDismissAnimation()
+    // Put the right image in place before the transition reveals it.
+    prepareTransitionImageForCurrentPage()
+    guard setTransitionState(.dismissing) else { return }
 
     transitionAnimator?.performDismissAnimation { [weak self] in
       self?.configuration.onDismiss?()
@@ -563,32 +596,26 @@ final class ImageViewerController: UIViewController {
     }
   }
 
-  private func prepareForDismissAnimation() {
-    // Hide content controllers
-    singleImageController?.view.isHidden = true
-    pageViewController?.view.isHidden = true
-
-    // Update transition image view with current image
-    if let currentImage = getCurrentImage() {
-      transitionImageView?.image = currentImage
-      transitionImageView?.isHidden = false
-
-      // Update animator with current image and source frame
-      if let imageView = transitionImageView {
-        transitionAnimator = ImageViewerTransitionAnimator(
-          imageView: imageView,
-          containerView: view,
-          backgroundView: backgroundView,
-          image: currentImage,
-          sourceFrame: getSourceFrame(for: currentIndex),
-          sourceContentMode: sourceContentMode,
-          configuration: configuration
-        )
-      }
+  /// Swaps the transition image to the current page and rebuilds the animator so
+  /// the transition flies the right image to/from its source. Shared by the
+  /// dismiss and interactive-drag paths. Visibility is handled by
+  /// `applyVisibility`; callers run this *before* transitioning into a state that
+  /// reveals the transition image, so the image content is in place first.
+  private func prepareTransitionImageForCurrentPage() {
+    guard let currentImage = getCurrentImage(), let imageView = transitionImageView else {
+      return
     }
 
-    // Hide overlay
-    updateOverlayAlpha(0)
+    imageView.image = currentImage
+    transitionAnimator = ImageViewerTransitionAnimator(
+      imageView: imageView,
+      containerView: view,
+      backgroundView: backgroundView,
+      image: currentImage,
+      sourceFrame: getSourceFrame(for: currentIndex),
+      sourceContentMode: sourceContentMode,
+      configuration: configuration
+    )
   }
 
   private func getCurrentImage() -> UIImage? {
@@ -604,28 +631,6 @@ final class ImageViewerController: UIViewController {
     let effectiveAlpha = isOverlayVisible ? alpha : 0
     overlayHostingController?.view.alpha = effectiveAlpha
     closeButtonHostingController?.view.alpha = effectiveAlpha
-  }
-
-  private func prepareTransitionForInteractiveDismiss() {
-    guard transitionImageView?.isHidden == true,
-          let currentImage = getCurrentImage(),
-          let imageView = transitionImageView
-    else { return }
-
-    imageView.image = currentImage
-    transitionAnimator = ImageViewerTransitionAnimator(
-      imageView: imageView,
-      containerView: view,
-      backgroundView: backgroundView,
-      image: currentImage,
-      sourceFrame: getSourceFrame(for: currentIndex),
-      sourceContentMode: sourceContentMode,
-      configuration: configuration
-    )
-
-    imageView.isHidden = false
-    singleImageController?.view.isHidden = true
-    pageViewController?.view.isHidden = true
   }
 
   // MARK: - Background Tap
@@ -741,12 +746,16 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
     didUpdateDismissProgress progress: CGFloat,
     translation: CGPoint
   ) {
+    // On the first frame of the drag (still .presented), put the right image in
+    // place before the transition into .interactive reveals it. Later frames
+    // are already .interactive and only update the animator.
+    if case .presented = transitionState {
+      prepareTransitionImageForCurrentPage()
+    }
     guard setTransitionState(.interactive(progress: progress, translation: translation)) else {
       return
     }
-    prepareTransitionForInteractiveDismiss()
     transitionAnimator?.updateInteractiveTransition(progress: progress, translation: translation)
-    updateOverlayAlpha(1 - progress)
   }
 
   func zoomableImageViewControllerDidRequestDismiss(_ controller: ZoomableImageViewController) {
@@ -755,7 +764,6 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
     // not fired twice — no per-caller guard needed (see #66).
     guard setTransitionState(.dismissing) else { return }
 
-    updateOverlayAlpha(0)
     transitionAnimator?.completeInteractiveDismiss { [weak self] in
       self?.configuration.onDismiss?()
       self?.onDismiss?()
@@ -764,11 +772,9 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
 
   func zoomableImageViewControllerDidCancelDismiss(_ controller: ZoomableImageViewController) {
     transitionAnimator?.cancelInteractiveTransition { [weak self] in
+      // Visibility (hide transition image, show content, restore overlay) is
+      // applied by the transition back into .presented.
       self?.setTransitionState(.presented)
-      self?.transitionImageView?.isHidden = true
-      self?.singleImageController?.view.isHidden = false
-      self?.pageViewController?.view.isHidden = false
-      self?.updateOverlayAlpha(1)
     }
   }
 
