@@ -274,7 +274,7 @@ final class ImageViewerController: UIViewController {
         // The viewer is already on screen (the error view was showing), so just
         // install the content without replaying the source-to-fullscreen appear
         // animation, and settle directly into the presented state.
-        self.transitionState = .presented
+        self.setTransitionState(.presented)
         self.showContentAfterAppear()
       case .failure(let error):
         self.showError(error)
@@ -458,7 +458,7 @@ final class ImageViewerController: UIViewController {
 
   private func performAppearAnimation() {
     transitionAnimator?.performAppearAnimation { [weak self] in
-      self?.transitionState = .presented
+      self?.setTransitionState(.presented)
       self?.showContentAfterAppear()
     }
   }
@@ -508,12 +508,34 @@ final class ImageViewerController: UIViewController {
     }
   }
 
+  // MARK: - Transition State
+
+  /// The single entry point for every `transitionState` mutation. Disallowed
+  /// transitions are rejected here in one place (see `TransitionState.allows`),
+  /// so callers no longer need their own guards — and a new dismiss path cannot
+  /// reintroduce the #66 double-fire by forgetting one.
+  ///
+  /// Returns `true` when the transition was applied, so callers that need to run
+  /// side effects only on a real transition (e.g. starting an animation) can
+  /// branch on the result.
+  @discardableResult
+  private func setTransitionState(_ next: TransitionState) -> Bool {
+    guard TransitionState.allows(transitionState.kind, to: next.kind) else {
+      return false
+    }
+    transitionState = next
+    return true
+  }
+
   // MARK: - Dismiss
 
   private func dismiss() {
+    // A programmatic dismiss (close button, background tap, accessibility) only
+    // applies while presented. An in-flight interactive drag finishes through
+    // its own pan-release path (didRequestDismiss), not this slide-to-source
+    // animation, so we don't interrupt it here.
     guard case .presented = transitionState else { return }
-
-    transitionState = .dismissing
+    guard setTransitionState(.dismissing) else { return }
 
     // Prepare for dismiss animation
     prepareForDismissAnimation()
@@ -719,23 +741,20 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
     didUpdateDismissProgress progress: CGFloat,
     translation: CGPoint
   ) {
-    transitionState = .interactive(progress: progress, translation: translation)
+    guard setTransitionState(.interactive(progress: progress, translation: translation)) else {
+      return
+    }
     prepareTransitionForInteractiveDismiss()
     transitionAnimator?.updateInteractiveTransition(progress: progress, translation: translation)
     updateOverlayAlpha(1 - progress)
   }
 
   func zoomableImageViewControllerDidRequestDismiss(_ controller: ZoomableImageViewController) {
-    // Ignore if a dismiss is already running (e.g. a background tap raced with
-    // the pan ending), so onDismiss is not fired twice.
-    switch transitionState {
-    case .presented, .interactive:
-      break
-    case .appearing, .dismissing:
-      return
-    }
+    // If a dismiss is already running (e.g. a background tap raced with the pan
+    // ending), the transition to .dismissing is rejected here and onDismiss is
+    // not fired twice — no per-caller guard needed (see #66).
+    guard setTransitionState(.dismissing) else { return }
 
-    transitionState = .dismissing
     updateOverlayAlpha(0)
     transitionAnimator?.completeInteractiveDismiss { [weak self] in
       self?.configuration.onDismiss?()
@@ -745,7 +764,7 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
 
   func zoomableImageViewControllerDidCancelDismiss(_ controller: ZoomableImageViewController) {
     transitionAnimator?.cancelInteractiveTransition { [weak self] in
-      self?.transitionState = .presented
+      self?.setTransitionState(.presented)
       self?.transitionImageView?.isHidden = true
       self?.singleImageController?.view.isHidden = false
       self?.pageViewController?.view.isHidden = false

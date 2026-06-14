@@ -8,6 +8,54 @@ enum TransitionState {
   case presented
   case interactive(progress: CGFloat, translation: CGPoint)
   case dismissing
+
+  /// The case identity, ignoring associated values. Transition rules are decided
+  /// by case identity alone, so `interactive`'s progress/translation updates do
+  /// not count as distinct transitions.
+  enum Kind {
+    case appearing
+    case presented
+    case interactive
+    case dismissing
+  }
+
+  var kind: Kind {
+    switch self {
+    case .appearing: .appearing
+    case .presented: .presented
+    case .interactive: .interactive
+    case .dismissing: .dismissing
+    }
+  }
+
+  /// Whitelist of allowed state transitions. Every `(from, to)` pair is listed
+  /// explicitly (no wildcards), so adding a new case forces a compile error and
+  /// a forgotten guard (the root cause of #66) becomes impossible at the type
+  /// level. `.dismissing` is terminal — every transition out of it is rejected,
+  /// which structurally prevents a double dismiss.
+  static func allows(_ from: Kind, to: Kind) -> Bool {
+    switch (from, to) {
+    // Allowed
+    case (.appearing, .presented): true       // appear animation done / retryLoad
+    case (.presented, .interactive): true     // pan begins
+    case (.interactive, .interactive): true   // progress update
+    case (.interactive, .presented): true     // pan cancelled, rebound
+    case (.interactive, .dismissing): true    // pan crossed threshold
+    case (.presented, .dismissing): true      // dismiss() / background tap
+
+    // Rejected
+    case (.appearing, .appearing): false
+    case (.appearing, .interactive): false
+    case (.appearing, .dismissing): false
+    case (.presented, .appearing): false
+    case (.presented, .presented): false
+    case (.interactive, .appearing): false
+    case (.dismissing, .appearing): false
+    case (.dismissing, .presented): false
+    case (.dismissing, .interactive): false
+    case (.dismissing, .dismissing): false
+    }
+  }
 }
 
 // MARK: - Image Viewer Transition Animator
