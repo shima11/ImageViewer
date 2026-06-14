@@ -841,13 +841,21 @@ private struct OverlayContainerView: View {
 
 // MARK: - Image Viewer Error
 
-enum ImageViewerError: Error, LocalizedError {
+/// Errors surfaced to a custom `errorContent` view.
+///
+/// Use this to pattern-match the error passed to `errorContent`:
+/// ```swift
+/// errorContent: { error in
+///   if case ImageViewerError.indexOutOfRange = error { ... }
+/// }
+/// ```
+public enum ImageViewerError: Error, LocalizedError {
   /// The requested index is outside the bounds of the image sources.
   case indexOutOfRange(index: Int, count: Int)
   /// The image source could not be loaded asynchronously.
   case invalidData
 
-  var errorDescription: String? {
+  public var errorDescription: String? {
     switch self {
     case .indexOutOfRange(let index, let count):
       return "Requested image index \(index) is out of range (count: \(count))."

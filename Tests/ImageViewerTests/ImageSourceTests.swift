@@ -82,6 +82,35 @@ struct ImageSourceTests {
   }
 }
 
+@Suite("ImageViewerError")
+struct ImageViewerErrorTests {
+
+  @Test("indexOutOfRange describes the index and count")
+  func indexOutOfRangeDescription() {
+    let error = ImageViewerError.indexOutOfRange(index: 3, count: 2)
+    let description = error.errorDescription
+    #expect(description?.contains("3") == true)
+    #expect(description?.contains("2") == true)
+  }
+
+  @Test("invalidData has a distinct description")
+  func invalidDataDescription() {
+    let invalid = ImageViewerError.invalidData.errorDescription
+    let outOfRange = ImageViewerError.indexOutOfRange(index: 0, count: 0).errorDescription
+    #expect(invalid != nil)
+    #expect(invalid != outOfRange)
+  }
+
+  @Test("Is matchable as a public type from an erased Error")
+  func matchableFromErasedError() {
+    let error: Error = ImageViewerError.invalidData
+    guard case ImageViewerError.invalidData = error else {
+      Issue.record("Expected to match ImageViewerError.invalidData")
+      return
+    }
+  }
+}
+
 @Suite("ImageViewerConfiguration")
 struct ImageViewerConfigurationTests {
 
