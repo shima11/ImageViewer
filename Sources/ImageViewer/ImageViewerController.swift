@@ -725,6 +725,15 @@ extension ImageViewerController: ZoomableImageViewControllerDelegate {
   }
 
   func zoomableImageViewControllerDidRequestDismiss(_ controller: ZoomableImageViewController) {
+    // Ignore if a dismiss is already running (e.g. a background tap raced with
+    // the pan ending), so onDismiss is not fired twice.
+    switch transitionState {
+    case .presented, .interactive:
+      break
+    case .appearing, .dismissing:
+      return
+    }
+
     transitionState = .dismissing
     updateOverlayAlpha(0)
     transitionAnimator?.completeInteractiveDismiss { [weak self] in
