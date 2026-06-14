@@ -14,6 +14,7 @@ A SwiftUI image viewer with smooth zoom transitions, gesture-based navigation, a
 - **Multiple Images** - Horizontal swipe pagination with UIPageViewController
 - **Async Loading** - Seamless integration with Nuke, Kingfisher, SDWebImage, or any async loader
 - **Full Customization** - Custom overlay, close button, page indicator, loading/error views
+- **Live Text** - Select and copy text inside images where supported
 - **Accessibility** - VoiceOver, Dynamic Type, and Reduce Motion support
 
 ## Requirements
@@ -32,7 +33,7 @@ Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/shima11/ImageViewer.git", from: "0.1.0")
+    .package(url: "https://github.com/shima11/ImageViewer.git", from: "0.2.0")
 ]
 ```
 
@@ -233,12 +234,15 @@ import SDWebImage
 | `maxScale` | `CGFloat` | `5.0` | Maximum zoom scale |
 | `doubleTapScale` | `CGFloat` | `3.0` | Zoom scale on double-tap |
 | `backgroundColor` | `Color` | `.black` | Viewer background color |
-| `transitionCornerRadius` | `CGFloat` | `8` | Corner radius during transition |
+| `transitionCornerRadius` | `CGFloat` | `8` | Corner radius applied to the image while the zoom transition is in flight (animates back to `0` at fullscreen) |
 | `enableHDR` | `Bool` | `false` | Render images in high dynamic range when available (iOS 17+) |
+| `enablesLiveText` | `Bool` | `true` | Enable Live Text selection/copy on images where supported |
 | `dismissThreshold` | `CGFloat` | `100` | Vertical distance to trigger dismiss |
 | `dismissVelocityThreshold` | `CGFloat` | `500` | Velocity threshold for dismiss |
 | `onDismiss` | `(() -> Void)?` | `nil` | Called when viewer is dismissed |
 | `onPageChange` | `((Int) -> Void)?` | `nil` | Called when page changes |
+
+The `sourceContentMode` argument on the `imageViewer(...)` modifiers (not part of `ImageViewerConfiguration`) sets how source thumbnails are matched during the zoom transition — `.fit` (default) or `.fill`.
 
 ## Image Sources
 

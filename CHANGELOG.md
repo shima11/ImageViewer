@@ -7,31 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-14
+
 ### Added
 - Device rotation support: the transition frame and zoom scale follow the new orientation.
 - iOS 26 Liquid Glass styling for the default close button and page indicator (falls back on earlier versions).
+- Live Text support: text in images can be selected and copied (iOS 16+, where supported).
 - `os.Logger` based logging (subsystem `com.shima11.ImageViewer`) for image loading and presentation failures.
 - `ImageSource.url(_:placeholder:)` convenience source backed by `URLSession`.
 - `ImageViewerConfiguration.enableHDR` to render HDR images on capable displays (iOS 17+).
 - Tapping the error view retries a failed async/URL image load.
 - VoiceOver Magic Tap and Escape gestures now dismiss the viewer.
-- Unit tests for index clamping, `ImageSource.placeholder` / `.url`, and `enableHDR`.
+- Unit tests for index clamping, `ImageSource.placeholder` / `.url`, `enableHDR`, the interactive-dismiss frame, the `ImageLoader` state machine, and `ImageViewerError`.
 - GitHub Actions CI building (strict concurrency, warnings as errors) and testing on every push and pull request.
 - DocC documentation catalog with a landing page and organized API topics.
 
 ### Changed
+- `ImageViewerError` is now `public`, so a custom `errorContent` can pattern-match the error instead of relying on its message.
 - `ImageViewerConfiguration.onDismiss` / `onPageChange` are now `@MainActor` closures, so updating SwiftUI state from them no longer triggers concurrency warnings.
 - Multi-window safety: the cover window is presented in the caller's window scene instead of the first foreground-active scene.
-- The default close button is pinned to the safe area layout guide (correct under rotation and varying safe areas).
+- The default close button is positioned at the top-trailing safe area and slightly smaller.
 - Async-loaded images more than two pages away are released to bound memory in large galleries.
 - `ImageViewerError` now distinguishes `.indexOutOfRange(index:count:)` from `.invalidData`.
 - VoiceOver announces the image position ("Image N of M") in multi-image galleries.
 - The default page indicator dots scale with Dynamic Type.
 - Retry on load failure is now exposed via `@Environment(\.imageViewerRetry)`: the default error view retries on tap, and custom error views can trigger it explicitly. The viewer no longer adds a full-view tap gesture, so custom error content keeps control of its hit testing.
+- A successful retry installs the image without replaying the source-to-fullscreen appear animation.
 - Internal image loading state is tracked by a single `[Int: ImageState]` map instead of three parallel dictionaries, making contradictory states unrepresentable.
 - Image loading is extracted into a dedicated `ImageLoader`, separating the loading state machine from the view controller's UI responsibilities.
 
 ### Fixed
+- A custom `loadingContent` view is now shown during the initial load instead of always falling back to the default indicator.
+- Rotating during the appear animation no longer leaves the viewer in a stuck state where it cannot be dismissed.
+- Interactive (swipe-down) dismissal now tracks the finger correctly instead of drifting toward the source thumbnail.
+- A background tap racing with a swipe-down release no longer fires `onDismiss` twice.
+- Live Text copy menu now appears (corrected the cover window level).
 - The viewer could become unpresentable when no active scene was available; state is now rolled back so it can be presented again.
 - Failed async image loads are no longer re-fetched in a loop.
 - The image load `Task` no longer retains the controller (`[weak self]`).
@@ -47,5 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   navigation, multi-image pagination, async image loading, full UI customization,
   and accessibility (VoiceOver, Dynamic Type, Reduce Motion).
 
-[Unreleased]: https://github.com/shima11/ImageViewer/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/shima11/ImageViewer/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/shima11/ImageViewer/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/shima11/ImageViewer/releases/tag/0.1.0
